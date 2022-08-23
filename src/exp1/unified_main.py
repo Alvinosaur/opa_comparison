@@ -22,6 +22,7 @@ from trajectory import Trajectory
 
 from exp_utils import *
 from globals import *
+from kinova_interface import KinovaInterface
 
 """
 An extremely modified version of unified_main.py.
@@ -37,6 +38,9 @@ NOTE: we could make this cleaner by defining generic objects,
 generic start/goals that are read from an experiment-specific file,
 but we don't have many experiments, so just copy all code to separate python
 files.
+
+NOTE: temporarily don't pick things up just to speed up testing,
+then at the end we can add it back for final pictures if necessary
 
 This file changes the logic heavily:
 - no pre-loaded demo.pkl files
@@ -119,38 +123,8 @@ def parse_arguments():
 
 
 if __name__ == "__main__":
-    ########################################################
-    rospy.init_node('exp1_unified')
     args = parse_arguments()
-
-    # Robot EE pose
-    rospy.Subscriber('/kinova/pose_tool_in_base_fk',
-                     PoseStamped, robot_pose_cb, queue_size=1)
-
-    # Robot joint state
-    rospy.Subscriber('/kinova/current_joint_state',
-                     Float64MultiArray, robot_joints_cb, queue_size=1)
-
-    # Target pose topic
-    pose_pub = rospy.Publisher(
-        "/kinova_demo/pose_cmd", PoseStamped, queue_size=10)
-
-    # Target joints
-    joints_deg_pub = rospy.Publisher(
-        "/siemens_demo/joint_cmd", Float64MultiArray, queue_size=10)
-
-    is_intervene_pub = rospy.Publisher("/is_intervene", Bool, queue_size=10)
-    gripper_pub = rospy.Publisher(
-        "/siemens_demo/gripper_cmd", Bool, queue_size=10)
-    extra_mass_pub = rospy.Publisher(
-        "/gripper_extra_mass", Float32, queue_size=10)
-
-    command_kinova_gripper(gripper_pub, cmd_open=True)
-
-    # Listen for keypresses marking start/stop of human intervention
-    listener = keyboard.Listener(on_press=is_intervene_cb)
-    listener.start()
-    ########################################################
+    kinova = KinovaInterface()
 
     # Start of unified-learning-specific code
     # define save path
@@ -192,13 +166,9 @@ if __name__ == "__main__":
         inspection_pose = inspection_poses[exp_iter]
 
         if not DEBUG:
-            reach_start_joints(HOME_JOINTS)
+            kinova.reach_start_joints(HOME_JOINTS)
 
-        reach_start_pos(start_pose, goal_pose, [], [])
-
-        # initialize target pose variables
-        local_target_pos = np.copy(cur_pos)
-        local_target_ori = np.copy(cur_ori_quat)
+        kinova.reach_start_pos(start_pose, goal_pose, [], [])
 
         trajopt = TrajOptExp(home=start_pose,
                              goal=goal_pose,
@@ -253,11 +223,11 @@ if __name__ == "__main__":
             if need_update and not DEBUG:
                 # Hold current pose while running adaptation
                 for i in range(5):
-                    pose_pub.publish(pose_to_msg(
+                    kinova.pose_pub.publish(pose_to_msg(
                         cur_pose, frame=ROBOT_FRAME))
                 rospy.sleep(0.1)
                 is_intervene = False
-                is_intervene_pub.publish(is_intervene)
+                kinova.publish_is_intervene()
 
                 assert len(
                     perturb_pose_traj) > 1, "Need intervention traj of > 1 steps"
@@ -279,12 +249,11 @@ if __name__ == "__main__":
                     [np.vstack(perturb_pos_traj), perturb_ori_traj])
 
                 # Perform adaptation and re-run trajopt
-                # TODO:
                 rm1.train_rewards(perturb_pose_traj)
 
                 # Save adapted reward model
-                # TODO:
-                rm1.save(folder=save_folder, name=f"exp_{exp_iter}_adapt_iter_{adapt_iter}")
+                rm1.save(folder=save_folder,
+                         name=f"exp_{exp_iter}_adapt_iter_{adapt_iter}")
                 adapt_iter += 1
 
                 # Re-run trajopt at final, perturbed state
@@ -326,16 +295,16 @@ if __name__ == "__main__":
 
             # Clip target EE position to bounds
             local_target_pos = np.clip(
-                local_target_pos, a_min=ee_min_pos, a_max=ee_max_pos)
+                local_target_pos, a_min=kinova.ee_min_pos, a_max=kinova.ee_max_pos)
 
             # Publish is_intervene
-            is_intervene_pub.publish(Bool(is_intervene))
+            kinova.publish_is_intervene()
 
             # Publish target pose
             if not DEBUG:
                 target_pose = np.concatenate(
                     [local_target_pos, interp_rot])
-                pose_pub.publish(pose_to_msg(target_pose, frame=ROBOT_FRAME))
+                kinova.pose_pub.publish(pose_to_msg(target_pose, frame=ROBOT_FRAME))
 
             if DEBUG:
                 cur_pos = local_target_pos
@@ -354,20 +323,11 @@ if __name__ == "__main__":
 
         # Save robot traj and intervene traj
         np.save(f"{save_folder}/ee_pose_traj_iter_{exp_iter}.npy", ee_pose_traj)
-        np.save(f"{save_folder}/is_intervene_traj{exp_iter}.npy", is_intervene_traj)
+        np.save(f"{save_folder}/is_intervene_traj{exp_iter}.npy",
+                is_intervene_traj)
 
-        dropoff_pose = np.copy(goal_pose)
-        dropoff_pose[2] = 0.05
-        reach_start_pos(dropoff_pose,
-                        goal_pose, [], [], pose_tol=0.07)
         print(
             f"Finished! Error {pose_error} vs tol {pose_error_tol}, \nderror {del_pose_running_avg.avg} vs tol {del_pose_tol}")
         print("Opening gripper to release item")
 
-        command_kinova_gripper(gripper_pub, cmd_open=True)
-        reach_start_pos(goal_pose, goal_pose, [], [])
-
-        # Once item released, set extra mass back to 0
-        for i in range(3):
-            extra_mass_pub.publish(Float32(0.0))
         rospy.sleep(0.1)
