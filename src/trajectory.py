@@ -100,7 +100,7 @@ class Trajectory(object):
 			next_t = self.waypts_time[curr_waypt_idx + 1]
 			waypt = curr_waypt + (next_waypt - curr_waypt) * \
                             ((t - curr_t) / (next_t - curr_t))
-		waypt = np.array(waypt).reshape((7, 1))
+		waypt = np.array(waypt).reshape((-1, 1))
 		return waypt
 
 	def deform(self, u_h, t, alpha, n):

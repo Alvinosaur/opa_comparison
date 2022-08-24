@@ -12,6 +12,8 @@ from scipy.spatial.transform import Rotation as R
 
 from exp_utils import *
 
+POS_DIM = 3
+
 
 class KinovaInterface(object):
     def __init__(self, ros_node_name="kinova_policy", debug=False):
@@ -38,9 +40,6 @@ class KinovaInterface(object):
         self.joints_ub = -1 * self.joints_lb
         self.joints_avoid_wraparound = [
             False, True, False, True, False, True, False]
-
-        # ROS pubs/subs
-        rospy.init_node('exp1_OPA')
 
         # Robot EE pose
         rospy.Subscriber('/kinova/pose_tool_in_base_fk',
@@ -110,7 +109,7 @@ class KinovaInterface(object):
 
             if self.cur_joints is None or self.cur_pos is None:
                 print("Waiting to receive robot joints and pose")
-                rospy.sleep(self.ros_delay)
+                rospy.sleep(0.2)
                 continue
 
             # for each joint, linearly interpolate with a max change
@@ -158,7 +157,8 @@ class KinovaInterface(object):
                 #     Params.agent_color_rgb, ])
                 pass
 
-            rospy.sleep(self.ros_delay)
+            # DO NOT CHANGE UNLESS ALSO CHANGE "RunningAverage"
+            rospy.sleep(0.4)
 
         print("Final joint error: ", joint_error)
 
@@ -183,7 +183,7 @@ class KinovaInterface(object):
 
                 if self.cur_pos is None:
                     print("Waiting to receive robot pos")
-                    rospy.sleep(self.ros_delay)
+                    rospy.sleep(0.2)
                     continue
 
                 pos_vec = start_pos - self.cur_pos
@@ -244,7 +244,8 @@ class KinovaInterface(object):
                 print("Waiting to reach start pos (%s), cur pos (%s) error: %.3f,  change: %.3f" %
                       (np.array2string(target_pos, precision=2), np.array2string(self.cur_pos, precision=2),
                        pose_error, dEE_pos_running_avg.avg))
-                rospy.sleep(self.ros_delay)
+                # DO NOT CHANGE UNLESS ALSO CHANGE "RunningAverage"
+                rospy.sleep(0.4)
 
             rospy.sleep(0.5)  # pause to let arm finish converging
 

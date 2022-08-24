@@ -18,6 +18,9 @@ from geometry_msgs.msg import PoseStamped
 from std_msgs.msg import Bool, Float32, Float64MultiArray
 
 import torch
+import sys
+sys.path.insert(0, "/home/ruic/Documents/opa")
+sys.path.insert(0, "/home/ruic/Documents/opa/opa_comparison/src")
 
 from model import Policy, PolicyNetwork, pose_to_model_input, decode_ori
 from train import random_seed_adaptation, process_single_full_traj, DEVICE
@@ -28,6 +31,10 @@ from elastic_band import Object
 from globals import *
 from kinova_interface import KinovaInterface
 from viz_3D import Viz3DROSPublisher
+
+import signal
+
+signal.signal(signal.SIGINT, sigint_handler)
 
 World2Net = 10.0
 Net2World = 1 / World2Net
@@ -40,8 +47,6 @@ else:
     dstep = 0.12
     ros_delay = 0.4  # NOTE: if modify this, must also modify rolling avg window of dpose
 
-HOME_POSE_NET = HOME_POSE * World2Net
-
 inspection_radii = np.array([5.0])[:, np.newaxis]  # defined on net scale
 inspection_rot_radii = np.array([4.0])[:, np.newaxis]
 goal_rot_radius = np.array([4.0])
@@ -50,8 +55,9 @@ goal_rot_radius = np.array([4.0])
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', action='store',
-                        type=str, help="trained model name")
-    parser.add_argument('--loaded_epoch', action='store', type=int)
+                        type=str, help="trained model name", default="policy_3D")
+    parser.add_argument('--loaded_epoch', action='store',
+                        type=int, default=100)
     parser.add_argument('--view_ros', action='store_true',
                         help="visualize 3D scene with ROS Rviz")
     parser.add_argument('--user', action='store', type=str,
@@ -74,7 +80,10 @@ if __name__ == "__main__":
     os.makedirs(save_folder)
 
     # Load trained model arguments
-    with open(os.path.join(Params.model_root, args.model_name, "train_args_pt_1.json"), "r") as f:
+    model_root = "../../saved_model_files"
+    model_name = "policy_3D"
+    loaded_epoch = 100
+    with open(os.path.join(model_root, model_name, "train_args_pt_1.json"), "r") as f:
         train_args = json.load(f)
 
     # load model
@@ -88,8 +97,8 @@ if __name__ == "__main__":
                             device=DEVICE).to(DEVICE)
     network.load_state_dict(
         torch.load(
-            os.path.join(Params.model_root, args.model_name,
-                         "model_%d.h5" % args.loaded_epoch),
+            os.path.join(model_root, args.model_name,
+                         "model_%d.h5" % loaded_epoch),
             map_location=DEVICE))
     policy = Policy(network)
 
@@ -160,7 +169,7 @@ if __name__ == "__main__":
     pose_error_tol = 0.1
     max_pose_error_tol = 0.2  # too far to be considered converged and not moving
     del_pose_tol = 0.005  # over del_pose_interval iterations
-    perturb_pose_traj_world = []
+    kinova.perturb_pose_traj = []
     override_pred_delay = False
     # [box1 intervene rot finish (don't reset to start), box2 watch,
     # box3 (pretend, need to buy) add new obstacles show online repulsion from them,
@@ -169,7 +178,7 @@ if __name__ == "__main__":
     kinova.command_kinova_gripper(cmd_open=True)
     num_exps = len(start_poses)
     # num_exps = 3
-    for exp_iter in range(num_exps + 1):  # +1 for original start pos
+    for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
         exp_iter = min(exp_iter, num_exps - 1)
@@ -191,9 +200,10 @@ if __name__ == "__main__":
             [goal_pos_world * World2Net, goal_ori_quat])
         goal_pose_world = np.concatenate([goal_pos_world, goal_ori_quat])
 
-        inspection_pose = inspection_poses[exp_iter]
+        inspection_pos_world = inspection_poses[exp_iter]
+        inspection_ori_quat = inspection_ori_quats[exp_iter]
         inspection_pose_net = np.concatenate(
-            [World2Net * inspection_pose[0:3], inspection_pose[3:]], axis=-1)[np.newaxis]
+            [World2Net * inspection_pos_world, inspection_ori_quat], axis=-1)[np.newaxis]
         inspection_pose_tensor = torch.from_numpy(pose_to_model_input(
             inspection_pose_net)).to(torch.float32).to(DEVICE)
 
@@ -206,11 +216,26 @@ if __name__ == "__main__":
 
         if not DEBUG:
             kinova.reach_start_joints(HOME_JOINTS)
+
+        approach_pose_world = np.copy(start_pose_world)
+        approach_pose_world[2] += 0.2
+        kinova.reach_start_pos(approach_pose_world, goal_pose_world, [], [])
+        if item_ids[exp_iter] == BOX_ID:
+            approach_pose_world_v2 = np.copy(start_pose_world)
+            approach_pose_world_v2[1] -= 0.1
+            kinova.reach_start_pos(
+                approach_pose_world_v2, goal_pose_world, [], [])
+        if item_ids[exp_iter] == CAN_ID:
+            approach_pose_world_v2 = np.copy(start_pose_world)
+            approach_pose_world_v2[0] -= 0.1
+            approach_pose_world_v2[1] -= 0.03
+            kinova.reach_start_pos(
+                approach_pose_world_v2, goal_pose_world, [], [])
         kinova.reach_start_pos(start_pose_world, goal_pose_world, [], [])
 
         # initialize target pose variables
-        local_target_pos_world = np.copy(cur_pos_world)
-        local_target_ori = np.copy(cur_ori_quat)
+        local_target_pos_world = np.copy(kinova.cur_pos)
+        local_target_ori = np.copy(kinova.cur_ori_quat)
 
         intervene_count = 0
         pose_error = 1e10
@@ -223,9 +248,10 @@ if __name__ == "__main__":
         prev_pose_world = None
         while (not rospy.is_shutdown() and pose_error > pose_error_tol and
                 (pose_error > max_pose_error_tol)):
-            cur_pose_world = np.concatenate([cur_pos_world, cur_ori_quat])
-            cur_pos_net = cur_pos_world * World2Net
-            cur_pose_net = np.concatenate([cur_pos_net, cur_ori_quat])
+            cur_pose_world = np.concatenate(
+                [kinova.cur_pos.copy(), kinova.cur_ori_quat.copy()])
+            cur_pos_net = kinova.cur_pos * World2Net
+            cur_pose_net = np.concatenate([cur_pos_net, kinova.cur_ori_quat])
             pose_error = calc_pose_error(
                 goal_pose_world, cur_pose_world, rot_scale=0)
             if prev_pose_world is not None:
@@ -234,8 +260,10 @@ if __name__ == "__main__":
 
             ee_pose_traj.append(cur_pose_world.copy())
             is_intervene_traj.append(kinova.is_intervene)
+            print("CUR POSE:")
+            print(ee_pose_traj[-1])
 
-            if need_update and not DEBUG:
+            if kinova.need_update and not DEBUG:
                 # Hold current pose while running adaptation
                 for i in range(5):
                     kinova.pose_pub.publish(pose_to_msg(
@@ -245,15 +273,15 @@ if __name__ == "__main__":
                 kinova.publish_is_intervene()
 
                 assert len(
-                    perturb_pose_traj_world) > 1, "Need intervention traj of > 1 steps"
+                    kinova.perturb_pose_traj) > 1, "Need intervention traj of > 1 steps"
                 dist = np.linalg.norm(
-                    perturb_pose_traj_world[-1][0:POS_DIM] - perturb_pose_traj_world[0][0:POS_DIM])
+                    kinova.perturb_pose_traj[-1][0:POS_DIM] - kinova.perturb_pose_traj[0][0:POS_DIM])
                 # 1 step for start, 1 step for goal at least
                 # T = max(2, int(np.ceil(dist / dstep)))
                 T = 5
                 perturb_pos_traj_world_interp = np.linspace(
-                    start=perturb_pose_traj_world[0][0:POS_DIM], stop=perturb_pose_traj_world[-1][0:POS_DIM], num=T)
-                final_perturb_ori = perturb_pose_traj_world[-1][POS_DIM:]
+                    start=kinova.perturb_pose_traj[0][0:POS_DIM], stop=kinova.perturb_pose_traj[-1][0:POS_DIM], num=T)
+                final_perturb_ori = kinova.perturb_pose_traj[-1][POS_DIM:]
 
                 perturb_ori_traj = np.copy(final_perturb_ori)[
                     np.newaxis, :].repeat(T, axis=0)
@@ -308,11 +336,11 @@ if __name__ == "__main__":
                     f"exp2_saved_weights_iter_{exp_iter}_num_{intervene_count}.pth"
                 )
                 np.save(f"perturb_traj_iter_{exp_iter}_num_{intervene_count}",
-                        perturb_pose_traj_world)
+                        kinova.perturb_pose_traj)
 
                 # reset the intervention data
-                perturb_pose_traj_world = []
-                need_update = False
+                kinova.perturb_pose_traj = []
+                kinova.need_update = False
                 override_pred_delay = True
 
                 # increment intervention count to avoid overwriting this intervention's data
@@ -369,7 +397,7 @@ if __name__ == "__main__":
                     if exp_iter == 4 and override_pred_delay:
                         vec = np.array([-0.05, -0.1, 0.05])
                         vec = vec / np.linalg.norm(vec)
-                        local_target_pos_world = cur_pos_world + dstep * vec
+                        local_target_pos_world = kinova.cur_pos + dstep * vec
 
                 override_pred_delay = False
 
@@ -387,7 +415,7 @@ if __name__ == "__main__":
                         pos=Net2World * cur_pose_net[0:POS_DIM], radius=Net2World * Params.agent_radius, ori=cur_pose_net[POS_DIM:])
                 ]
                 agent_traj = np.vstack(
-                    [Net2World * cur_pose_net, np.concatenate([Net2World * local_target_pos_world, cur_ori_quat])])
+                    [Net2World * cur_pose_net, np.concatenate([Net2World * local_target_pos_world, kinova.cur_ori_quat])])
                 if isinstance(object_forces, torch.Tensor):
                     object_forces = object_forces[0].detach().cpu().numpy()
 
@@ -397,7 +425,7 @@ if __name__ == "__main__":
 
             # Apply low-pass filter to smooth out policy's sudden changes in orientation
             interp_rot = interpolate_rotations(
-                start_quat=cur_ori_quat, stop_quat=local_target_ori, alpha=0.7)
+                start_quat=kinova.cur_ori_quat, stop_quat=local_target_ori, alpha=0.7)
 
             # Clip target EE position to bounds
             local_target_pos_world = np.clip(
@@ -410,17 +438,18 @@ if __name__ == "__main__":
             if not DEBUG:
                 target_pose = np.concatenate(
                     [local_target_pos_world, interp_rot])
-                kinova.pose_pub.publish(pose_to_msg(target_pose, frame=ROBOT_FRAME))
+                kinova.pose_pub.publish(pose_to_msg(
+                    target_pose, frame=ROBOT_FRAME))
 
             if DEBUG:
-                cur_pos_world = local_target_pos_world
-                cur_ori_quat = interp_rot
+                kinova.cur_pos = local_target_pos_world
+                kinova.cur_ori_quat = interp_rot
 
             if it % 2 == 0:
                 print("Pos error: ", np.linalg.norm(
-                    local_target_pos_world - cur_pos_world))
+                    local_target_pos_world - kinova.cur_pos))
                 print("Ori error: ", np.linalg.norm(
-                    np.arccos(np.abs(cur_ori_quat @ local_target_ori))))
+                    np.arccos(np.abs(kinova.cur_ori_quat @ local_target_ori))))
                 print("Dpose: ", del_pose_running_avg.avg)
                 print()
 
@@ -429,6 +458,8 @@ if __name__ == "__main__":
             rospy.sleep(0.3)
 
         # Save robot traj and intervene traj
+        print("FULL TRAJ:")
+        print(ee_pose_traj)
         np.save(f"{save_folder}/ee_pose_traj_iter_{exp_iter}.npy", ee_pose_traj)
         np.save(f"{save_folder}/is_intervene_traj{exp_iter}.npy",
                 is_intervene_traj)

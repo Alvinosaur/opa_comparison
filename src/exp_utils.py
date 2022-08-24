@@ -193,7 +193,13 @@ def calc_pose_error(pose_quat1, pose_quat2, pos_scale=1, rot_scale=0.1):
     pose_quat1 = pose_quat1.flatten()
     pose_quat2 = pose_quat2.flatten()
     pos_error = np.linalg.norm(pose_quat1[0:3] - pose_quat2[0:3])
-    rot_error = np.arccos(np.abs(pose_quat1[3:] @ pose_quat2[3:]))
+    try:
+        rot_error = np.arccos(
+            np.clip(-1, 1, np.abs(pose_quat1[3:] @ pose_quat2[3:]))
+        )
+    except:
+        print("ERROR CALCULATING ROT ERROR")
+        rot_error = 0.0
     pose_error = pos_scale * pos_error + rot_scale * rot_error
     return pose_error
 

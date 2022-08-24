@@ -1,11 +1,11 @@
+import sys
+sys.path.insert(0, "/home/ruic/Documents/opa")
+sys.path.insert(0, "/home/ruic/Documents/opa/opa_comparison/src")
+
 import numpy as np
 import torch
 
 from scipy.spatial.transform import Rotation as R
-
-cuda = torch.cuda.is_available()
-DEVICE = "cuda:0" if cuda else "cpu"
-print("DEVICE: %s" % DEVICE)
 
 num_objects = 1
 

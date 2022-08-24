@@ -1,28 +1,23 @@
-from concurrent.futures import process
-from tkinter import W
 import numpy as np
 import argparse
-import pickle
-from torch.utils.tensorboard import SummaryWriter
-import datetime
-import matplotlib.pyplot as plt
 import os
-import sys
-import torch
 from scipy.spatial.transform import Rotation as R
-from pynput import keyboard
 import time
 
 import rospy
-from geometry_msgs.msg import PoseStamped
+
+from globals import *
+from exp_utils import *
+from kinova_interface import KinovaInterface
 
 from unified_trajopt import TrajOptBase
 from unified_reward import TrainReward
 from trajectory import Trajectory
 
-from exp_utils import *
-from globals import *
-from kinova_interface import KinovaInterface
+import signal
+
+signal.signal(signal.SIGINT, sigint_handler)
+
 
 """
 An extremely modified version of unified_main.py.
@@ -55,11 +50,14 @@ TRAJ_LEN = 10  # fixed number of wayponts for trajopt
 waypts_time = np.linspace(0, T, TRAJ_LEN)
 adapt_num_epochs = 5
 
+DEVICE = "cpu"
+print("DEVICE: %s" % DEVICE)
+
 # Constants
 reward_model1_path = "models/reward_model_1"
 EXP_TYPE = "exp1"
 
-DEBUG = True
+DEBUG = False
 if DEBUG:
     dstep = 0.05
     ros_delay = 0.1
@@ -74,13 +72,13 @@ class TrajOptExp(TrajOptBase):
     POS_WEIGHT = 1.0
     ROT_WEIGHT = 0.75
 
-    def __init__(self, human_pose_quat, context_dim, *args, **kwargs):
+    def __init__(self, human_pose_euler, context_dim, *args, **kwargs):
         super(TrajOptExp, self).__init__(*args, **kwargs)
-        self.human_pose_quat = human_pose_quat
+        self.human_pose_euler = human_pose_euler
 
         # rotate relative to human facing exactly opposite of human
         # so desired orientation is 180 degrees rotated aboutu human's z-axis.
-        self.desired_present_item_rot = (R.from_quat(human_pose_quat[3:7]) *
+        self.desired_present_item_rot = (R.from_euler("xyz", human_pose_euler[3:7]) *
                                          R.from_euler("xyz", [0, 0, 180], degrees=True)).as_quat()
 
     # custom process context function
@@ -133,9 +131,9 @@ if __name__ == "__main__":
     os.makedirs(save_folder)
 
     # Define reward model
-    # context is either (dist, direction, rot aaxis) or (pos, rot aaxis)
-    state_dim = 3 + 4  # (pos, rot quat)
-    context_dim = 1 + 3 + 4 if args.use_state_features else 3 + 4
+    state_dim = 3 + 3  # (pos, rot euler)
+    # context: human pose
+    context_dim = 1 + 3 + 3 if args.use_state_features else 3 + 3
     input_dim = state_dim + context_dim  # robot pose, human pose
     rm1 = TrainReward(noise=0.2, model_dim=(input_dim, 128),
                       epoch=500, traj_len=TRAJ_LEN, device=DEVICE)
@@ -156,30 +154,55 @@ if __name__ == "__main__":
         # Set start robot pose
         start_pos = start_poses[exp_iter]
         start_ori_quat = start_ori_quats[exp_iter]
-        start_pose = np.concatenate([start_pos, start_ori_quat])
+        start_ori_euler = R.from_quat(start_ori_quat).as_euler("XYZ")
+        start_pose = np.concatenate([start_pos, start_ori_euler])
+        start_pose_quat = np.concatenate([start_pos, start_ori_quat])
 
         # Set goal robot pose
         goal_pos = goal_poses[exp_iter]
         goal_ori_quat = goal_ori_quats[exp_iter]
-        goal_pose = np.concatenate([goal_pos, goal_ori_quat])
+        goal_ori_euler = R.from_quat(goal_ori_quat).as_euler("XYZ")
+        goal_pose = np.concatenate([goal_pos, goal_ori_euler])
+        goal_pose_quat = np.concatenate([goal_pos, goal_ori_quat])
 
-        inspection_pose = inspection_poses[exp_iter]
+        # Set inspection pose
+        inspection_pos = inspection_poses[exp_iter]
+        inspection_ori_quat = inspection_ori_quats[exp_iter]
+        inspection_ori_euler = R.from_quat(inspection_ori_quat).as_euler("XYZ")
+        inspection_pose = np.concatenate(
+            [inspection_pos, inspection_ori_euler])
 
         if not DEBUG:
             kinova.reach_start_joints(HOME_JOINTS)
 
-        kinova.reach_start_pos(start_pose, goal_pose, [], [])
+        approach_pose = np.copy(start_pose_quat)
+        approach_pose[2] += 0.2
+        kinova.reach_start_pos(approach_pose, goal_pose_quat, [], [])
+        if item_ids[exp_iter] == BOX_ID:
+            approach_pose_v2 = np.copy(start_pose_quat)
+            approach_pose_v2[1] -= 0.1
+            kinova.reach_start_pos(
+                approach_pose_v2, goal_pose_quat, [], [])
+        if item_ids[exp_iter] == CAN_ID:
+            approach_pose_v2 = np.copy(start_pose_quat)
+            approach_pose_v2[0] -= 0.1
+            approach_pose_v2[1] -= 0.03
+            kinova.reach_start_pos(
+                approach_pose_v2, goal_pose_quat, [], [])
+        kinova.reach_start_pos(start_pose_quat, goal_pose_quat, [], [])
 
         trajopt = TrajOptExp(home=start_pose,
                              goal=goal_pose,
-                             human_pose_quat=inspection_pose,
+                             human_pose_euler=inspection_pose,
                              context_dim=context_dim,
+                             use_state_features=args.use_state_features,
                              waypoints=TRAJ_LEN)
         traj = Trajectory(
             waypts=trajopt.optimize(context=inspection_pose, reward_model=rm1),
             waypts_time=waypts_time)
         local_target_pos = traj.waypts[0, 0:3]
-        local_target_ori = traj.waypts[0, 3:7]
+        local_target_ori_quat = R.from_euler(
+            "XYZ", traj.waypts[0, 3:]).as_quat()
 
         intervene_count = 0
         pose_error = 1e10
@@ -189,7 +212,7 @@ if __name__ == "__main__":
         ee_pose_traj = []
         is_intervene_traj = []
 
-        prev_pose = None
+        prev_pose_quat = None
         # modified MPC Fashion: run trajopt every K steps
         K = 10
         step = 0
@@ -197,59 +220,71 @@ if __name__ == "__main__":
         while (not rospy.is_shutdown() and pose_error > pose_error_tol and
                 (pose_error > max_pose_error_tol)):
             step += 1
-            if step % K == 0:
-                # run trajopt in MPC fashion, new traj starting from current pose
-                trajopt = TrajOptExp(home=cur_pose,
-                                     goal=goal_pose,
-                                     human_pose_quat=inspection_pose,
-                                     context_dim=context_dim,
-                                     waypoints=TRAJ_LEN)
-                traj = Trajectory(
-                    waypts=trajopt.optimize(
-                        context=inspection_pose, reward_model=rm1),
-                    waypts_time=waypts_time)
-                start_t = time.time()
+            # if step % K == 0:
+            #     # run trajopt in MPC fashion, new traj starting from current pose
+            #     trajopt = TrajOptExp(home=cur_pose,
+            #                          goal=goal_pose,
+            #                          human_pose_euler=inspection_pose,
+            #                          context_dim=context_dim,
+            #                          waypoints=TRAJ_LEN)
+            #     traj = Trajectory(
+            #         waypts=trajopt.optimize(
+            #             context=inspection_pose, reward_model=rm1),
+            #         waypts_time=waypts_time)
+            #     start_t = time.time()
 
             # calculate next action to take based on planned traj
-            cur_pose = np.concatenate([cur_pos, cur_ori_quat])
-            pose_error = calc_pose_error(goal_pose, cur_pose, rot_scale=0)
-            if prev_pose is not None:
-                del_pose = calc_pose_error(prev_pose, cur_pose)
+            cur_pose_quat = np.concatenate(
+                [kinova.cur_pos, kinova.cur_ori_quat])
+            cur_pose = np.concatenate([kinova.cur_pos,
+                                       R.from_quat(kinova.cur_ori_quat).as_euler("XYZ")])
+            pose_error = calc_pose_error(
+                goal_pose_quat, cur_pose_quat, rot_scale=0)
+            if prev_pose_quat is not None:
+                del_pose = calc_pose_error(prev_pose_quat, cur_pose_quat)
                 del_pose_running_avg.update(del_pose)
 
-            ee_pose_traj.append(cur_pose.copy())
-            is_intervene_traj.append(is_intervene)
+            ee_pose_traj.append(cur_pose_quat.copy())
+            is_intervene_traj.append(kinova.is_intervene)
 
-            if need_update and not DEBUG:
+            kinova.perturb_pose_traj = np.load("unified_perturb_pose_traj.npy")
+
+            if kinova.need_update and not DEBUG:
                 # Hold current pose while running adaptation
                 for i in range(5):
                     kinova.pose_pub.publish(pose_to_msg(
-                        cur_pose, frame=ROBOT_FRAME))
+                        cur_pose_quat, frame=ROBOT_FRAME))
                 rospy.sleep(0.1)
-                is_intervene = False
+                kinova.is_intervene = False
                 kinova.publish_is_intervene()
 
                 assert len(
-                    perturb_pose_traj) > 1, "Need intervention traj of > 1 steps"
+                    kinova.perturb_pose_traj) > 1, "Need intervention traj of > 1 steps"
 
                 # TODO: for fair comparison, should we still use the assumption that human perturb is linear?
-                dist = np.linalg.norm(
-                    perturb_pose_traj[-1][0:POS_DIM] - perturb_pose_traj[0][0:POS_DIM])
+                # dist = np.linalg.norm(
+                #     kinova.perturb_pose_traj[-1][0:POS_DIM] - kinova.perturb_pose_traj[0][0:POS_DIM])
                 # 1 step for start, 1 step for goal at least
                 # T = max(2, int(np.ceil(dist / dstep)))
-                T = 5
-                perturb_pos_traj_interp = np.linspace(
-                    start=perturb_pose_traj[0][0:POS_DIM], stop=perturb_pose_traj[-1][0:POS_DIM], num=T)
-                final_perturb_ori = perturb_pose_traj[-1][POS_DIM:]
+                # T = 5
+                # perturb_pos_traj_interp = np.linspace(
+                #     start=kinova.perturb_pose_traj[0][0:POS_DIM], stop=kinova.perturb_pose_traj[-1][0:POS_DIM], num=T)
+                # final_perturb_ori = kinova.perturb_pose_traj[-1][POS_DIM:]
 
-                perturb_ori_traj = np.copy(final_perturb_ori)[
-                    np.newaxis, :].repeat(T, axis=0)
-                perturb_pos_traj = perturb_pos_traj_interp
-                perturb_pose_traj = np.hstack(
-                    [np.vstack(perturb_pos_traj), perturb_ori_traj])
+                # perturb_ori_traj = np.copy(final_perturb_ori)[
+                #     np.newaxis, :].repeat(T, axis=0)
+                # perturb_pos_traj = perturb_pos_traj_interp
+                # perturb_pose_traj = np.hstack(
+                #     [np.vstack(perturb_pos_traj), perturb_ori_traj])
+
+                perturb_pose_traj = np.vstack(kinova.perturb_pose_traj)
+                perturb_pose_traj_euler = np.concatenate([
+                    perturb_pose_traj[:, 0:3],
+                    R.from_quat(perturb_pose_traj[:, 3:]).as_euler("XYZ")
+                ])
 
                 # Perform adaptation and re-run trajopt
-                rm1.train_rewards(perturb_pose_traj)
+                rm1.train_rewards(perturb_pose_traj_euler)
 
                 # Save adapted reward model
                 rm1.save(folder=save_folder,
@@ -259,7 +294,7 @@ if __name__ == "__main__":
                 # Re-run trajopt at final, perturbed state
                 trajopt = TrajOptExp(home=cur_pose,
                                      goal=goal_pose,
-                                     human_pose_quat=inspection_pose,
+                                     human_pose_euler=inspection_pose,
                                      context_dim=context_dim,
                                      waypoints=TRAJ_LEN)
                 traj = Trajectory(
@@ -269,8 +304,8 @@ if __name__ == "__main__":
                 start_t = time.time()
 
                 # reset the intervention data
-                perturb_pose_traj = []
-                need_update = False
+                kinova.perturb_pose_traj = []
+                kinova.need_update = False
                 override_pred_delay = True
 
                 # increment intervention count to avoid overwriting this intervention's data
@@ -283,15 +318,17 @@ if __name__ == "__main__":
                 print("new target", step)
                 # calculate new action
                 override_pred_delay = False
-                local_target_pose = traj.interpolate(t=time.time() - start_t)
+                local_target_pose = traj.interpolate(
+                    t=time.time() - start_t).flatten()
                 local_target_pos = local_target_pose[0:3]
-                local_target_ori = local_target_pose[3:7]
+                local_target_ori_quat = R.from_euler(
+                    "XYZ", local_target_pose[3:]).as_quat()
 
             # TODO: are these necessary, or can we move this into
             # traj opt with constraints and cost
             # Apply low-pass filter to smooth out policy's sudden changes in orientation
             interp_rot = interpolate_rotations(
-                start_quat=cur_ori_quat, stop_quat=local_target_ori, alpha=0.7)
+                start_quat=kinova.cur_ori_quat, stop_quat=local_target_ori_quat, alpha=0.7)
 
             # Clip target EE position to bounds
             local_target_pos = np.clip(
@@ -304,21 +341,22 @@ if __name__ == "__main__":
             if not DEBUG:
                 target_pose = np.concatenate(
                     [local_target_pos, interp_rot])
-                kinova.pose_pub.publish(pose_to_msg(target_pose, frame=ROBOT_FRAME))
+                kinova.pose_pub.publish(pose_to_msg(
+                    target_pose, frame=ROBOT_FRAME))
 
             if DEBUG:
-                cur_pos = local_target_pos
-                cur_ori_quat = interp_rot
+                kinova.cur_pos = local_target_pos
+                kinova.cur_ori_quat = interp_rot
 
             if step % 2 == 0:
                 print("Pos error: ", np.linalg.norm(
-                    local_target_pos - cur_pos))
+                    local_target_pos - kinova.cur_pos))
                 print("Ori error: ", np.linalg.norm(
-                    np.arccos(np.abs(cur_ori_quat @ local_target_ori))))
+                    np.arccos(np.abs(kinova.cur_ori_quat @ local_target_ori_quat))))
                 print("Dpose: ", del_pose_running_avg.avg)
                 print()
 
-            prev_pose = np.copy(cur_pose)
+            prev_pose_quat = np.copy(cur_pose_quat)
             rospy.sleep(0.3)
 
         # Save robot traj and intervene traj

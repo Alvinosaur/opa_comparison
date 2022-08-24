@@ -7,10 +7,9 @@ from scipy.optimize import LinearConstraint, NonlinearConstraint
 
 class TrajOptBase(object):
 
-    def __init__(self, home, goal, state_len, use_state_features, waypoints=10,
-                max_iter=1000, eps=1e-3):
+    def __init__(self, home, goal, use_state_features, waypoints=10,
+                 max_iter=1000, eps=1e-3):
         self.n_waypoints = waypoints
-        self.state_len = state_len
         self.home = home
         self.goal = goal
         self.use_state_features = use_state_features
@@ -50,7 +49,8 @@ class TrajOptBase(object):
         self.rot_action_con = NonlinearConstraint(
             self.rot_action_con_func, -0.8, 0.8)
 
-        self.constraints = {self.start_con, self.goal_con, self.pos_action_con, self.rot_action_con}
+        self.constraints = {self.start_con, self.goal_con,
+                            self.pos_action_con, self.rot_action_con}
 
     def pos_action_con_func(self, xi):
         xi = xi.reshape(self.n_waypoints, self.state_dim)
@@ -84,9 +84,9 @@ class TrajOptBase(object):
         # "context" seems to be some goal or target (see trajcost_true())
         # fed into self.reward_model.reward() network as context (see trajcost())
         res = minimize(lambda x: self.trajcost(reward_model, context, x),
-                       self.xi0, method=method, constraints=self.constraints, 
-                        options={'eps': self.eps, 'maxiter': self.max_iter}
-        )
+                       self.xi0, method=method, constraints=self.constraints,
+                       options={'eps': self.eps, 'maxiter': self.max_iter}
+                       )
 
         xi = res.x.reshape(self.n_waypoints, self.state_dim)
         return xi
