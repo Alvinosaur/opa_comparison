@@ -19,8 +19,9 @@ from std_msgs.msg import Bool, Float32, Float64MultiArray
 
 import torch
 import sys
-sys.path.insert(0, "/home/ruic/Documents/opa")
-sys.path.insert(0, "/home/ruic/Documents/opa/opa_comparison/src")
+
+from globals import *
+add_paths()  # sets the paths for the below imports
 
 from model import Policy, PolicyNetwork, pose_to_model_input, decode_ori
 from train import random_seed_adaptation, process_single_full_traj, DEVICE
@@ -28,7 +29,6 @@ from data_params import Params
 from exp_params import *
 from exp_utils import *
 from elastic_band import Object
-from globals import *
 from kinova_interface import KinovaInterface
 from viz_3D import Viz3DROSPublisher
 
@@ -215,23 +215,9 @@ if __name__ == "__main__":
             [objects_tensor, object_rot_radii_torch], dim=-1).unsqueeze(0)
 
         if not DEBUG:
-            kinova.reach_start_joints(HOME_JOINTS)
+            kinova.reach_joints(HOME_JOINTS)
 
-        approach_pose_world = np.copy(start_pose_world)
-        approach_pose_world[2] += 0.2
-        kinova.reach_start_pos(approach_pose_world, goal_pose_world, [], [])
-        if item_ids[exp_iter] == BOX_ID:
-            approach_pose_world_v2 = np.copy(start_pose_world)
-            approach_pose_world_v2[1] -= 0.1
-            kinova.reach_start_pos(
-                approach_pose_world_v2, goal_pose_world, [], [])
-        if item_ids[exp_iter] == CAN_ID:
-            approach_pose_world_v2 = np.copy(start_pose_world)
-            approach_pose_world_v2[0] -= 0.1
-            approach_pose_world_v2[1] -= 0.03
-            kinova.reach_start_pos(
-                approach_pose_world_v2, goal_pose_world, [], [])
-        kinova.reach_start_pos(start_pose_world, goal_pose_world, [], [])
+        perform_grasp(start_pose_world, item_ids[exp_iter], kinova)
 
         # initialize target pose variables
         local_target_pos_world = np.copy(kinova.cur_pos)
@@ -456,6 +442,9 @@ if __name__ == "__main__":
             it += 1
             prev_pose_world = np.copy(cur_pose_world)
             rospy.sleep(0.3)
+
+        kinova.reach_pose(goal_pose_world)
+        exit()
 
         # Save robot traj and intervene traj
         print("FULL TRAJ:")

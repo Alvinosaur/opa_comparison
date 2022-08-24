@@ -93,7 +93,7 @@ class KinovaInterface(object):
         for i in range(len(self.cur_joints)):
             self.cur_joints[i] = normalize_pi_neg_pi(self.cur_joints[i])
 
-    def reach_start_joints(self, target_joints, joint_error_tol=0.1, dpose_tol=1e-2,
+    def reach_joints(self, target_joints, joint_error_tol=0.1, dpose_tol=1e-2,
                            viz_3D_publisher=None):
 
         dEE_pos = 1e10
@@ -162,18 +162,18 @@ class KinovaInterface(object):
 
         print("Final joint error: ", joint_error)
 
-    def reach_start_pos(self, start_pose, goal_pose, object_poses, object_radii=None, goal_rot_radius=None,
-                        pose_tol=0.03, dpose_tol=1e-2, reaching_dstep=0.1, clip_movement=False, viz_3D_publisher=None):
+    def reach_pose(self, target_pose, goal_pose=None, object_poses=[], object_radii=[], goal_rot_radius=None,
+                   pose_tol=0.03, dpose_tol=1e-2, reaching_dstep=0.1, clip_movement=False, viz_3D_publisher=None):
 
-        start_pos = start_pose[:3]
-        start_ori_quat = start_pose[3:]
+        target_pos = target_pose[:3]
+        target_ori_quat = target_pose[3:]
         if self.debug:
-            self.cur_pos = np.copy(start_pos)
-            self.cur_ori_quat = np.copy(start_ori_quat)
+            self.cur_pos = np.copy(target_pos)
+            self.cur_ori_quat = np.copy(target_ori_quat)
             return
 
         else:
-            start_dist = np.linalg.norm(start_pos - self.cur_pos)
+            start_dist = np.linalg.norm(target_pos - self.cur_pos)
             pose_error = 1e10
             dEE_pos = 1e10
             dEE_pos_running_avg = RunningAverage(length=5, init_vals=1e10)
@@ -186,7 +186,7 @@ class KinovaInterface(object):
                     rospy.sleep(0.2)
                     continue
 
-                pos_vec = start_pos - self.cur_pos
+                pos_vec = target_pos - self.cur_pos
                 # pos_vec[2] = np.clip(pos_vec[2], -0.06, 0.1)
                 pos_mag = np.linalg.norm(pos_vec)
                 pos_vec = pos_vec * min(pos_mag, reaching_dstep) / pos_mag
@@ -236,7 +236,7 @@ class KinovaInterface(object):
 
                 cur_pose = np.concatenate([self.cur_pos, self.cur_ori_quat])
                 pose_error = calc_pose_error(
-                    cur_pose, start_pose, rot_scale=0.1)
+                    cur_pose, target_pose, rot_scale=0.1)
                 if prev_pos is not None:
                     dEE_pos = np.linalg.norm(self.cur_pos - prev_pos)
                 dEE_pos_running_avg.update(dEE_pos)
@@ -250,7 +250,7 @@ class KinovaInterface(object):
             rospy.sleep(0.5)  # pause to let arm finish converging
 
             print("Final error: ", pose_error)
-            print(self.cur_pos, start_pos)
+            print(self.cur_pos, target_pos)
             print("Cur joints: ", self.cur_joints)
 
     def command_kinova_gripper(self, cmd_open):

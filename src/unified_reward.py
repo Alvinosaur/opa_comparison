@@ -7,6 +7,8 @@ from torch.optim import Adam
 from torch.nn.utils.convert_parameters import parameters_to_vector
 import matplotlib.pyplot as plt
 
+from tqdm import tqdm
+
 
 class TrainReward(object):
 
@@ -37,7 +39,9 @@ class TrainReward(object):
         self.loss_cal = torch.nn.CrossEntropyLoss()
 
         # precompute the deformations
-        length = 2 * self.traj_len
+        self.compute_deform_mats(length=2 * self.traj_len)
+
+    def compute_deform_mats(self, length):
         A = np.zeros((length + 2, length))
         for idx in range(length):
             A[idx, idx] = 1
@@ -50,6 +54,7 @@ class TrainReward(object):
     def deform(self, xi, tau, start_idx=None):
         xi_deformed = np.copy(xi)
         N = len(xi)
+        self.compute_deform_mats(length=2 * N)
         if start_idx == None:
             start_idx = np.random.randint(1, N - 1)
         gamma = np.zeros((len(self.U), self.action_dim))
@@ -57,46 +62,55 @@ class TrainReward(object):
             self.U[0] = tau[idx]
             # gamma[:,idx] = self.R @ self.U
             gamma[:, idx] = np.dot(self.R, self.U)
+
         xi_deformed[start_idx:, :self.action_dim] += gamma[:N - start_idx, :]
         return xi_deformed
 
-    def train_rewards(self, demos, load_paths=None):
+    def train_rewards(self, demos, context, load_paths=None):
         if load_paths is not None:
             for i, path in enumerate(load_paths):
                 self.reward_models[i].load_state_dict(torch.load(path))
 
-        demos_tensor = torch.from_numpy(demos).to(self.device)
+        demos_tensor = [torch.from_numpy(demo).to(
+            self.device).to(torch.float32) for demo in demos]
+        context_tensor = torch.from_numpy(
+            context).to(self.device).to(torch.float32)
         avg_loss = sum([
-            self.train_reward(demos, demos_tensor, self.reward_models[i])
+            self.train_reward(demos, demos_tensor,
+                              context_tensor, self.reward_models[i])
             for i in range(self.n_models)]) / self.n_models
 
         return avg_loss
 
     # train the reward model
-    def train_reward(self, demos, demos_tensor, reward_model):
+    def train_reward(self, demos, demos_tensor, context_tensor, reward_model):
         optim = Adam(reward_model.parameters(), lr=self.LR)
         scheduler = torch.optim.lr_scheduler.StepLR(optim,
                                                     step_size=self.LR_STEP_SIZE, gamma=self.LR_GAMMA)
-        num_demos = demos.shape[0]
+        num_demos = len(demos)
         # always assume orig demo (idx=0) is better than noisily perturbed demo
         base_labels = torch.zeros(num_demos, device=self.device)
-        for epoch in range(self.EPOCH):
+        for epoch in tqdm(range(self.EPOCH)):
             logits_1 = torch.Tensor([])
             logits_2 = torch.Tensor([])
 
             for _ in range(self.batch_size):
                 demo_idx = np.random.randint(0, num_demos)
                 demo_orig = demos[demo_idx].copy()
-                demo_orig_tensor = demos_tensor[demo_idx].copy()
+                demo_orig_tensor = demos_tensor[demo_idx]
 
                 # generate another artificial demo by deforming with random noise
                 rand_noise = np.random.normal(0, self.noise, self.action_dim)
                 demo_deformed = self.deform(demo_orig, rand_noise)
-                demo_deformed_tensor = torch.from_numpy(demo_deformed)
+                demo_deformed_tensor = torch.from_numpy(
+                    demo_deformed).to(self.device).to(torch.float32)
 
-                R_orig = torch.sum(reward_model(demo_orig_tensor)).unsqueeze(0)
+                R_orig = torch.sum(reward_model(
+                    torch.cat([demo_orig_tensor, context_tensor], dim=-1)
+                )).unsqueeze(0)
                 R_deformed = torch.sum(reward_model(
-                    demo_deformed_tensor)).unsqueeze(0)
+                    torch.cat([demo_deformed_tensor, context_tensor], dim=-1)
+                )).unsqueeze(0)
                 logits_1 = torch.cat((logits_1, R_orig), dim=0)
                 logits_2 = torch.cat((logits_2, R_deformed), dim=0)
 

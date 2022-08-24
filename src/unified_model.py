@@ -22,11 +22,10 @@ class StateFunction(nn.Module):
         self.apply(weights_init_)
 
     def forward(self, state):
-
         # to scale the laptop position into a more easily recognized range
         state = torch.clone(state)
-        state[:,6] *= 10.0
-        
+        state[:, 6] *= 10.0
+
         h1 = self.ReLU(self.linear1(state))
         h2 = self.ReLU(self.linear2(h1))
         return torch.tanh(self.linear3(h2))

@@ -3,10 +3,13 @@ import argparse
 import os
 from scipy.spatial.transform import Rotation as R
 import time
+import signal
 
 import rospy
 
 from globals import *
+add_paths()  # sets the paths for the below imports
+
 from exp_utils import *
 from kinova_interface import KinovaInterface
 
@@ -14,7 +17,6 @@ from unified_trajopt import TrajOptBase
 from unified_reward import TrainReward
 from trajectory import Trajectory
 
-import signal
 
 signal.signal(signal.SIGINT, sigint_handler)
 
@@ -145,7 +147,7 @@ if __name__ == "__main__":
     perturb_pose_traj = []
     override_pred_delay = False
     num_exps = len(start_poses)
-    for exp_iter in range(num_exps + 1):  # +1 for original start pos
+    for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
         exp_iter = min(exp_iter, num_exps - 1)
@@ -173,23 +175,9 @@ if __name__ == "__main__":
             [inspection_pos, inspection_ori_euler])
 
         if not DEBUG:
-            kinova.reach_start_joints(HOME_JOINTS)
+            kinova.reach_joints(HOME_JOINTS)
 
-        approach_pose = np.copy(start_pose_quat)
-        approach_pose[2] += 0.2
-        kinova.reach_start_pos(approach_pose, goal_pose_quat, [], [])
-        if item_ids[exp_iter] == BOX_ID:
-            approach_pose_v2 = np.copy(start_pose_quat)
-            approach_pose_v2[1] -= 0.1
-            kinova.reach_start_pos(
-                approach_pose_v2, goal_pose_quat, [], [])
-        if item_ids[exp_iter] == CAN_ID:
-            approach_pose_v2 = np.copy(start_pose_quat)
-            approach_pose_v2[0] -= 0.1
-            approach_pose_v2[1] -= 0.03
-            kinova.reach_start_pos(
-                approach_pose_v2, goal_pose_quat, [], [])
-        kinova.reach_start_pos(start_pose_quat, goal_pose_quat, [], [])
+        perform_grasp(start_pose_quat, item_ids[exp_iter], kinova)
 
         trajopt = TrajOptExp(home=start_pose,
                              goal=goal_pose,
@@ -246,8 +234,6 @@ if __name__ == "__main__":
 
             ee_pose_traj.append(cur_pose_quat.copy())
             is_intervene_traj.append(kinova.is_intervene)
-
-            kinova.perturb_pose_traj = np.load("unified_perturb_pose_traj.npy")
 
             if kinova.need_update and not DEBUG:
                 # Hold current pose while running adaptation

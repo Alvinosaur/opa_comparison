@@ -1,11 +1,19 @@
 import sys
-sys.path.insert(0, "/home/ruic/Documents/opa")
-sys.path.insert(0, "/home/ruic/Documents/opa/opa_comparison/src")
-
 import numpy as np
 import torch
 
 from scipy.spatial.transform import Rotation as R
+
+
+def add_paths():
+    sys.path.insert(0, "/home/ruic/Documents/opa")
+    sys.path.insert(0, "/home/ruic/Documents/opa/opa_comparison/src")
+
+
+add_paths()
+
+from exp_utils import BOX_ID, CAN_ID, BOX_MASS, CAN_MASS
+
 
 num_objects = 1
 
@@ -15,20 +23,12 @@ POS_DIM = 3
 DROP_OFF_OFFSET = np.array([0.0, 0.0, -0.1])
 T = 20.0  # taken from FERL yaml file
 
-BOX_MASS = 0.3
-CAN_MASS = 1.0
-
-# Item ID's (if item == can, slide into grasp pose horizontally)
-BOX_ID = 0
-CAN_ID = 1
 item_ids = [
     BOX_ID,
     BOX_ID,
     BOX_ID,
 ]
-# Item masses
-BOX_MASS = 0.3
-CAN_MASS = 1.0
+
 extra_masses = [
     BOX_MASS,
     BOX_MASS,
@@ -46,6 +46,11 @@ start_ori_quats = [
     np.array([0, 1., 0, 0]),
     np.array([0, 1., 0, 0]),
 ]
+start_joints_all = [
+    np.array([270.271, 68.32, 221.0, 241.136, 91.637, 36.716, 18.348]),
+
+]
+
 # Item dropoff poses
 goal_poses = [
     np.array([0.4, -0.475, 0.1]),
@@ -53,6 +58,11 @@ goal_poses = [
     np.array([0.36, -0.475, 0.1]),
 ]
 goal_ori_quats = start_ori_quats
+goal_joints_all = [
+    np.array([20, 67.329, 249.304, 289.5, 117.57, 80.329, 92.4]),
+
+]
+
 inspection_poses = [
     np.array([0.7, 0.1, 0.05]),  # sitting at center of table
     np.array([0.6, -0.2, 0.4]),   # standing at corner of table
