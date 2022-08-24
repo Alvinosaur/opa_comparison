@@ -83,10 +83,12 @@ class TrajOptBase(object):
     def optimize(self, reward_model, context, method='SLSQP'):
         # "context" seems to be some goal or target (see trajcost_true())
         # fed into self.reward_model.reward() network as context (see trajcost())
+        print("Trajectory Optimization...")
         res = minimize(lambda x: self.trajcost(reward_model, context, x),
                        self.xi0, method=method, constraints=self.constraints,
                        options={'eps': self.eps, 'maxiter': self.max_iter}
                        )
+        print("Trajectory Optimization... DONE!")
 
         xi = res.x.reshape(self.n_waypoints, self.state_dim)
         return xi

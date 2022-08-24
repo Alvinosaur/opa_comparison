@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 class TrainReward(object):
 
-    def __init__(self, device, model_dim=(12, 128), action_dim=6, epoch=500, LR=0.001, L2_ratio=0.005, noise=2.0, n_models=3, traj_len=10,
+    def __init__(self, device, model_dim=(12, 128), action_dim=6, epoch=500, LR=0.001, L2_ratio=0.005, noise=0.05, n_models=3, traj_len=10,
                  batch_size=32):
 
         # hyperparameters
@@ -89,7 +89,25 @@ class TrainReward(object):
                                                     step_size=self.LR_STEP_SIZE, gamma=self.LR_GAMMA)
         num_demos = len(demos)
         # always assume orig demo (idx=0) is better than noisily perturbed demo
-        base_labels = torch.zeros(num_demos, device=self.device)
+        base_labels = torch.zeros(
+            self.batch_size, device=self.device, dtype=torch.long)
+
+        # generate deformed trajectories beforehand to reduce training time
+        print("generating deformed trajectories...")
+        assert num_demos == 1  # NOTE: temporary, debugging
+        demo_orig = demos[0].copy()
+
+        num_deforms = 1000
+        deformed = []
+        for _ in tqdm(range(num_deforms)):
+            rand_noise = np.random.normal(0, self.noise, self.action_dim)
+            demo_deformed = self.deform(demo_orig, rand_noise)
+            demo_deformed_tensor = torch.from_numpy(
+                demo_deformed).to(self.device).to(torch.float32)
+            deformed.append(demo_deformed_tensor)
+        np.save("deformed.npy", deformed)
+        print("generating deformed trajectories... DONE!")
+
         for epoch in tqdm(range(self.EPOCH)):
             logits_1 = torch.Tensor([])
             logits_2 = torch.Tensor([])
@@ -99,11 +117,8 @@ class TrainReward(object):
                 demo_orig = demos[demo_idx].copy()
                 demo_orig_tensor = demos_tensor[demo_idx]
 
-                # generate another artificial demo by deforming with random noise
-                rand_noise = np.random.normal(0, self.noise, self.action_dim)
-                demo_deformed = self.deform(demo_orig, rand_noise)
-                demo_deformed_tensor = torch.from_numpy(
-                    demo_deformed).to(self.device).to(torch.float32)
+                deformed_idx = np.random.randint(0, num_deforms)
+                demo_deformed_tensor = deformed[deformed_idx]
 
                 R_orig = torch.sum(reward_model(
                     torch.cat([demo_orig_tensor, context_tensor], dim=-1)
@@ -140,6 +155,12 @@ class TrainReward(object):
         for i in range(self.n_models):
             torch.save(self.reward_models[i].state_dict(),
                        os.path.join(folder, name + f"_{i}" + ".pth"))
+
+    def load(self, folder, name):
+        for i in range(self.n_models):
+            self.reward_models[i].load_state_dict(
+                torch.load(os.path.join(folder, name + f"_{i}" + ".pth")))
+        print(f"Successfully loaded {name}!")
 
     # likelihood of choosing option 1 or option 2
     def preference_probability(self, query, reward_model):

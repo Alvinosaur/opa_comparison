@@ -8,11 +8,13 @@ from scipy.spatial.transform import Rotation as R
 def add_paths():
     sys.path.insert(0, "/home/ruic/Documents/opa")
     sys.path.insert(0, "/home/ruic/Documents/opa/opa_comparison/src")
+    sys.path.insert(0, "/Users/Alvin/Documents/opa")
+    sys.path.insert(0, "/Users/Alvin/Documents/opa/opa_comparison/src")
 
 
 add_paths()
 
-from exp_utils import BOX_ID, CAN_ID, BOX_MASS, CAN_MASS
+# from exp_utils import BOX_ID, CAN_ID, BOX_MASS, CAN_MASS
 
 
 num_objects = 1
@@ -22,6 +24,14 @@ HOME_JOINTS = np.array([-0.705, 0.952, -1.663, -1.927, 2.131, 1.252, -0.438])
 POS_DIM = 3
 DROP_OFF_OFFSET = np.array([0.0, 0.0, -0.1])
 T = 20.0  # taken from FERL yaml file
+
+# Item ID's (if item == can, slide into grasp pose horizontally)
+BOX_ID = 0
+CAN_ID = 1
+
+# Item masses
+BOX_MASS = 0.3
+CAN_MASS = 1.0
 
 item_ids = [
     BOX_ID,

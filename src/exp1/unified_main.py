@@ -137,7 +137,7 @@ if __name__ == "__main__":
     # context: human pose
     context_dim = 1 + 3 + 3 if args.use_state_features else 3 + 3
     input_dim = state_dim + context_dim  # robot pose, human pose
-    rm1 = TrainReward(noise=0.2, model_dim=(input_dim, 128),
+    rm1 = TrainReward(model_dim=(input_dim, 128),
                       epoch=500, traj_len=TRAJ_LEN, device=DEVICE)
 
     adapt_iter = 0
@@ -171,7 +171,7 @@ if __name__ == "__main__":
         inspection_pos = inspection_poses[exp_iter]
         inspection_ori_quat = inspection_ori_quats[exp_iter]
         inspection_ori_euler = R.from_quat(inspection_ori_quat).as_euler("XYZ")
-        inspection_pose = np.concatenate(
+        inspection_pose_euler = np.concatenate(
             [inspection_pos, inspection_ori_euler])
 
         if not DEBUG:
@@ -181,12 +181,13 @@ if __name__ == "__main__":
 
         trajopt = TrajOptExp(home=start_pose,
                              goal=goal_pose,
-                             human_pose_euler=inspection_pose,
+                             human_pose_euler=inspection_pose_euler,
                              context_dim=context_dim,
                              use_state_features=args.use_state_features,
                              waypoints=TRAJ_LEN)
         traj = Trajectory(
-            waypts=trajopt.optimize(context=inspection_pose, reward_model=rm1),
+            waypts=trajopt.optimize(
+                context=inspection_pose_euler, reward_model=rm1),
             waypts_time=waypts_time)
         local_target_pos = traj.waypts[0, 0:3]
         local_target_ori_quat = R.from_euler(
@@ -270,7 +271,9 @@ if __name__ == "__main__":
                 ])
 
                 # Perform adaptation and re-run trajopt
-                rm1.train_rewards(perturb_pose_traj_euler)
+                context = inspection_pose_euler[np.newaxis, :].repeat(
+                    T, axis=0)
+                rm1.train_rewards([perturb_pose_traj_euler, ], context=context)
 
                 # Save adapted reward model
                 rm1.save(folder=save_folder,
@@ -280,12 +283,12 @@ if __name__ == "__main__":
                 # Re-run trajopt at final, perturbed state
                 trajopt = TrajOptExp(home=cur_pose,
                                      goal=goal_pose,
-                                     human_pose_euler=inspection_pose,
+                                     human_pose_euler=inspection_pose_euler,
                                      context_dim=context_dim,
                                      waypoints=TRAJ_LEN)
                 traj = Trajectory(
                     waypts=trajopt.optimize(
-                        context=inspection_pose, reward_model=rm1),
+                        context=inspection_pose_euler, reward_model=rm1),
                     waypts_time=waypts_time)
                 start_t = time.time()
 
