@@ -76,15 +76,20 @@ class TrajOptBase(object):
             states.append(np.concatenate([xi[idx, :], context], axis=None))
         states = np.vstack(states)
         states = torch.FloatTensor(states)
-        R = reward_model.reward(states)
-        return -R
+        R_learned = reward_model.reward(states)
+
+        avoid_stuck_weight = 1.0  # TODO: tune
+        R_avoid_stuck = avoid_stuck_weight * np.linalg.norm(
+            xi[1:, 0:3] - xi[0:-1, 0:3], axis=-1).sum()
+        cost = -(R_learned + R_avoid_stuck)
+        return cost
 
     # run the optimizer
     def optimize(self, reward_model, context, method='SLSQP'):
         # "context" seems to be some goal or target (see trajcost_true())
         # fed into self.reward_model.reward() network as context (see trajcost())
         print("Trajectory Optimization...")
-        res = minimize(lambda x: self.trajcost(reward_model, context, x),
+        res = minimize(lambda x: self.trajcost(reward_model, context, x) if reward_model else None,
                        self.xi0, method=method, constraints=self.constraints,
                        options={'eps': self.eps, 'maxiter': self.max_iter}
                        )

@@ -94,7 +94,7 @@ class KinovaInterface(object):
             self.cur_joints[i] = normalize_pi_neg_pi(self.cur_joints[i])
 
     def reach_joints(self, target_joints, joint_error_tol=0.1, dpose_tol=1e-2,
-                           viz_3D_publisher=None):
+                     viz_3D_publisher=None):
 
         dEE_pos = 1e10
         dEE_pos_running_avg = RunningAverage(length=5, init_vals=1e10)
@@ -201,7 +201,7 @@ class KinovaInterface(object):
                 # target_pos = cur_pos + np.array([0, -0.1, 0.2])
                 dist_to_start_ratio = min(pos_mag / (start_dist + 1e-5), 1.0)
                 target_ori_quat = interpolate_rotations(
-                    start_quat=self.cur_ori_quat, stop_quat=start_ori_quat,
+                    start_quat=self.cur_ori_quat, stop_quat=target_ori_quat,
                     alpha=1 - dist_to_start_ratio)
                 self.pose_pub.publish(
                     pose_to_msg(np.concatenate([target_pos, target_ori_quat]), frame=ROBOT_FRAME))

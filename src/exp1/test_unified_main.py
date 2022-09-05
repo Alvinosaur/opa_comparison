@@ -208,7 +208,7 @@ def main():
         # 2nd iter: perform adaptation on saved perturbation data
         # 3rd iter: visualize new behavior after adaptation
         if exp_iter == 1:
-            perturb_pose_traj = np.load("unified_perturb_pose_traj.npy")
+            perturb_pose_traj = np.load("/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials/trial_6/perturb_traj_iter_0_num_0.npy")
 
             # Downsample original traj
             perturb_pose_traj = Trajectory(
@@ -292,10 +292,10 @@ def view_trained_reward_traj():
                       epoch=500, traj_len=TRAJ_LEN, device=DEVICE)
 
     # Load trained reward
-    rm1.load(folder="", name="test_unified_models")
+    # rm1.load(folder="/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials/trial_6/", name="exp_0_adapt_iter_0")
 
     ax = plt.axes(projection='3d')
-    perturb_traj = np.load("unified_perturb_pose_traj.npy")
+    perturb_traj = np.load("/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials/trial_6/perturb_traj_iter_0_num_0.npy")
 
     exp_iter = 0
 
@@ -326,12 +326,16 @@ def view_trained_reward_traj():
                          context_dim=context_dim,
                          use_state_features=use_state_features,
                          waypoints=10)
-    traj = Trajectory(
-        waypts=trajopt.optimize(
-            context=inspection_pose_euler, reward_model=rm1),
-        waypts_time=waypts_time)
+    # traj = Trajectory(
+    #     waypts=trajopt.optimize(
+    #         context=inspection_pose_euler, reward_model=rm1),
+    #     waypts_time=waypts_time)
+    # traj_wpts = traj.waypts
 
-    traj_wpts = traj.waypts
+    traj_wpts = np.load("/home/ruic/Documents/opa/opa_comparison/src/test_unified_traj_2.npy")
+
+
+    
     ax.plot3D(perturb_traj[:, 0], perturb_traj[:, 1], perturb_traj[:, 2],
               label="orig", color="black", linewidth=5)
 
@@ -340,10 +344,10 @@ def view_trained_reward_traj():
         ax.plot3D(traj_wpts[t:t + 2, 0], traj_wpts[t:t + 2, 1],
                   traj_wpts[t:t + 2, 2], alpha=0.9, color=cm.jet(t / T), linewidth=3)
 
-        if t % 3 == 0:
-            draw_coordinate_frame(ax,
-                                  T=traj_wpts[t, 0:3],
-                                  R=R.from_euler("XYZ", traj_wpts[t, 3:]).as_matrix())
+        # if t % 3 == 0:
+        #     draw_coordinate_frame(ax,
+        #                           T=traj_wpts[t, 0:3],
+        #                           R=R.from_euler("XYZ", traj_wpts[t, 3:]).as_matrix())
 
     ax.scatter(*start_pose[:3], label="Start")
     ax.scatter(*goal_pose[:3], label="Goal")

@@ -32,7 +32,7 @@ class Trajectory(object):
 		assert len(self.waypts) > 1, "Cannot upsample a one-waypoint trajectory."
 
 		timestep = (self.waypts_time[-1] - self.waypts_time[0]) / (num_waypts - 1)
-		waypts = np.zeros((num_waypts, 7))
+		waypts = np.zeros((num_waypts, self.waypts.shape[-1]))
 		waypts_time = [None] * num_waypts
 
 		t = self.waypts_time[0]
@@ -67,13 +67,13 @@ class Trajectory(object):
 		assert len(self.waypts) > 1, "Cannot downsample a one-waypoint trajectory."
 
 		timestep = (self.waypts_time[-1] - self.waypts_time[0]) / (num_waypts - 1)
-		waypts = np.zeros((num_waypts, 7))
+		waypts = np.zeros((num_waypts, self.waypts.shape[-1]))
 		waypts_time = [None] * num_waypts
 
 		for index in range(num_waypts):
 			t = self.waypts_time[0] + index * timestep
 			waypts_time[index] = t
-			waypts[index, :] = self.interpolate(t).reshape((1, 7))
+			waypts[index, :] = self.interpolate(t).reshape((1, -1))
 
 		return Trajectory(waypts, waypts_time)
 

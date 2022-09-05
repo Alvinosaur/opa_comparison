@@ -128,8 +128,8 @@ if __name__ == "__main__":
 
     # Start of unified-learning-specific code
     # define save path
-    trial_num = len(os.listdir("unified_saved_trials"))
-    save_folder = f"unified_saved_trials/trial_{trial_num}"
+    trial_num = len(os.listdir("exp1/unified_saved_trials"))
+    save_folder = f"exp1/unified_saved_trials/trial_{trial_num}"
     os.makedirs(save_folder)
 
     # Define reward model
@@ -268,12 +268,18 @@ if __name__ == "__main__":
                 perturb_pose_traj_euler = np.concatenate([
                     perturb_pose_traj[:, 0:3],
                     R.from_quat(perturb_pose_traj[:, 3:]).as_euler("XYZ")
-                ])
+                ], axis=-1)
+
+                np.save(f"{save_folder}/perturb_traj_iter_{exp_iter}_num_{intervene_count}",
+                kinova.perturb_pose_traj)
+                perturb_pose_traj_euler = Trajectory(
+                    waypts=perturb_pose_traj_euler,
+                    waypts_time=np.linspace(0, 40, len(perturb_pose_traj_euler))).downsample(num_waypts=int(40)).waypts
 
                 # Perform adaptation and re-run trajopt
                 context = inspection_pose_euler[np.newaxis, :].repeat(
-                    T, axis=0)
-                rm1.train_rewards([perturb_pose_traj_euler, ], context=context)
+                    40, axis=0)
+                rm1.train_rewards([ perturb_pose_traj_euler, ], context=context)
 
                 # Save adapted reward model
                 rm1.save(folder=save_folder,
@@ -285,6 +291,7 @@ if __name__ == "__main__":
                                      goal=goal_pose,
                                      human_pose_euler=inspection_pose_euler,
                                      context_dim=context_dim,
+                                     use_state_features=args.use_state_features,
                                      waypoints=TRAJ_LEN)
                 traj = Trajectory(
                     waypts=trajopt.optimize(
