@@ -3,6 +3,7 @@ Copyright (c) 2022 Alvin Shek
 This work is licensed under the terms of the MIT license.
 For a copy, see <https://opensource.org/licenses/MIT>.
 """
+from gc import collect
 import numpy as np
 import os
 import argparse
@@ -11,7 +12,8 @@ import json
 import typing
 from tqdm import tqdm
 import copy
-from pynput import keyboard
+# from pynput import keyboard
+import re
 
 import rospy
 from geometry_msgs.msg import PoseStamped
@@ -39,7 +41,7 @@ signal.signal(signal.SIGINT, sigint_handler)
 World2Net = 10.0
 Net2World = 1 / World2Net
 
-DEBUG = False
+DEBUG = True
 if DEBUG:
     dstep = 0.05
     ros_delay = 0.1
@@ -64,18 +66,24 @@ def parse_arguments():
                         default="some_user", help="user name to save results")
     parser.add_argument('--trial', action='store', type=int, default=0)
     parser.add_argument('--run_eval', action='store_true')
+    parser.add_argument('--collected_folder', action='store', type=str)
     args = parser.parse_args()
 
     return args
 
 
-def run_adaptation(policy, kinova):
-    # Load pre-collected perturbation data, adapt network
-    collected_folder = "/home/ruic/Documents/opa/opa_comparison/src/exp1/opa_saved_trials_inspection/perturb_collection"
+def run_adaptation(policy, kinova, collected_folder):
+    files = os.listdir(collected_folder)
+    exp_iter = None
+    for f in files:
+        matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
+        if len(matches) > 0:
+            import ipdb
+            ipdb.set_trace()
+            exp_iter = int(matches[0])
 
     kinova.perturb_pose_traj = np.load(os.path.join(
-        collected_folder, "perturb_traj_iter_1_num_0.npy"))
-    exp_iter = 1  # NOTE: MUST MATCH THE FILENAME iter_{} above!!!
+        collected_folder, f"perturb_traj_iter_{exp_iter}_num_0.npy"))
     start_pos_world = start_poses[exp_iter]
     start_ori_quat = start_ori_quats[exp_iter]
     start_pose_world = np.concatenate([start_pos_world, start_ori_quat])
@@ -251,7 +259,8 @@ if __name__ == "__main__":
     )
 
     if args.run_eval:
-        run_adaptation(policy, kinova)
+        assert args.collected_folder is not None
+        run_adaptation(policy, kinova, collected_folder=args.collected_folder)
 
     it = 0
     pose_error_tol = 0.1

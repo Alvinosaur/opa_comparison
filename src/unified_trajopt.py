@@ -78,7 +78,7 @@ class TrajOptBase(object):
         states = torch.FloatTensor(states)
         R_learned = reward_model.reward(states)
 
-        avoid_stuck_weight = 1.0  # TODO: tune
+        avoid_stuck_weight = 0.2  # TODO: tune
         R_avoid_stuck = avoid_stuck_weight * np.linalg.norm(
             xi[1:, 0:3] - xi[0:-1, 0:3], axis=-1).sum()
         cost = -(R_learned + R_avoid_stuck)

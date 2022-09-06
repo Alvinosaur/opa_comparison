@@ -54,28 +54,18 @@ extra_masses = [
 start_poses = [
     # 1st: human perturbation
     np.array([0.2, 0.35, -0.08]),
-    # 2nd: watch updated behavior in same environment setting
     np.array([0.2, 0.35, -0.08]),
-
-    # Now observe model's ability to handle other environment settings
-    # Sufficiently different start/goals and human poses
-    # that require a different trajectory to be taken
-    # TODO:
     np.array([0.2, 0.35, -0.08]),
 
 ]
 start_ori_quats = [
     np.array([0, 1., 0, 0]),
     np.array([0, 1., 0, 0]),
-
-    # TODO:
     np.array([0, 1., 0, 0]),
 ]
 start_joints_all = [
     np.array([270.271, 68.32, 221.0, 241.136, 91.637, 36.716, 18.348]),
     np.array([270.271, 68.32, 221.0, 241.136, 91.637, 36.716, 18.348]),
-
-    # TODO:
     np.array([270.271, 68.32, 221.0, 241.136, 91.637, 36.716, 18.348]),
 ]
 
@@ -83,33 +73,22 @@ start_joints_all = [
 goal_poses = [
     np.array([0.4, -0.475, 0.1]),
     np.array([0.4, -0.475, 0.1]),
-
-    # TODO:
     np.array([0.4, -0.475, 0.1]),
 ]
 goal_ori_quats = start_ori_quats
 goal_joints_all = [
     np.array([20, 67.329, 249.304, 289.5, 117.57, 80.329, 92.4]),
     np.array([20, 67.329, 249.304, 289.5, 117.57, 80.329, 92.4]),
-
-    # TODO:
     np.array([20, 67.329, 249.304, 289.5, 117.57, 80.329, 92.4]),
 ]
 
 inspection_poses = [
     np.array([0.7, 0.1, 0.05]),  # sitting at center of table
-    np.array([0.7, 0.1, 0.05]),  # sitting at center of table
-
-    # TODO:
-    np.array([0.6, -0.2, 0.4]),   # standing at corner of table?
-
-
+    np.array([0.6, -0.2, 0.4]),   # standing at one corner of table
+    np.array([0.6, 0.2, -0.1]),   # standing at another corner of table
 ]
 inspection_ori_quats = [
     R.from_euler("zyx", [0, 30, 0], degrees=True).as_quat(),
-    R.from_euler("zyx", [0, 30, 0], degrees=True).as_quat(),
-
-    # TODO:
-    # standing at corner of table?
     R.from_euler("zyx", [-20, -20, 0], degrees=True).as_quat(),
+    R.from_euler("zyx", [20, 40, 0], degrees=True).as_quat(),
 ]
