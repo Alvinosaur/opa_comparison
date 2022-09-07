@@ -49,13 +49,13 @@ def view_trained_reward_traj(perturb_path, path):
     ax = plt.axes(projection='3d')
 
     exp_iter = int(re.findall("ee_pose_traj_iter_(\d+).npy", path)[0])
+    perturb_iter = int(re.findall(
+        "perturb_traj_iter_(\d+)_num_\d+.npy", perturb_path)[0])
+    inspection_ori_quat_from_perturb = inspection_ori_quats[perturb_iter]
 
     perturb_traj = np.load(perturb_path)
     ax.plot3D(perturb_traj[:, 0], perturb_traj[:, 1], perturb_traj[:, 2],
               label="perturb", color="black", linewidth=5)
-    draw_coordinate_frame(ax,
-                          T=perturb_traj[-1, 0:3],
-                          R=R.from_quat(perturb_traj[-1, 3:]).as_matrix())
 
     # Set start robot pose
     start_pos = start_poses[exp_iter]
@@ -77,6 +77,21 @@ def view_trained_reward_traj(perturb_path, path):
     inspection_ori_euler = R.from_quat(inspection_ori_quat).as_euler("XYZ")
     inspection_pose_euler = np.concatenate(
         [inspection_pos, inspection_ori_euler])
+
+    # draw estimated ground truth desired orientation
+    # Right-multiply rotational offset with inspection to get relative to inspector pose
+    # R_perturb = R_inspection(FROM THE ORIGINAL PERTURBATION) * R_desired_offset
+    # -> (left-mult) inv(R_inspection) * R_perturb = R_desired_offset
+    desired_rot_offset = (
+        R.from_quat(inspection_ori_quat_from_perturb).inv() *
+        R.from_quat(perturb_traj[-1, 3:])).as_quat()
+    # NOTE: right-multiply rot offset to get relative to (FROM CURRENT SCENARIO) human pose
+    desired_rot = (R.from_quat(inspection_ori_quat) *
+                   R.from_quat(desired_rot_offset)).as_quat()
+    draw_coordinate_frame(ax,
+                          T=perturb_traj[-1, 0:3],
+                          R=R.from_quat(desired_rot).as_matrix())
+    print("NOTE: Final Perturbation Orientation is estimated for the current human pose! Perturbation position traj isn't changed from the original recording!!!!!!!!")
 
     ee_pose_traj = np.load(path)
     print(ee_pose_traj.shape[0])
@@ -114,17 +129,17 @@ def parse_arguments():
     return args
 
 
-if __name__ == "__main__":
-    args = parse_arguments()
-    view_trained_reward_traj(path=args.path, perturb_path=args.perturb_path)
-
-
 """
 Commands:
-OPA executed traj 0 with perturb at iter 1:
-    python plot_ee_traj.py --path opa_saved_trials_inspection/eval/ee_pose_traj_iter_0.npy --perturb_path opa_saved_trials_inspection/perturb_collection/perturb_traj_iter_1_num_0.npy
+OPA executed traj 0 with perturb at iter 0:
+    python plot_ee_traj.py --path opa_saved_trials_inspection/eval/ee_pose_traj_iter_0.npy --perturb_path opa_saved_trials_inspection/perturb_collection/perturb_traj_iter_0_num_0.npy
 
 Unified:
     python plot_ee_traj.py --path unified_saved_trials_inspection/eval/ee_pose_traj_iter_0.npy --perturb_path unified_saved_trials_inspection/perturb_collection/perturb_traj_iter_0_num_0.npy
 
 """
+
+
+if __name__ == "__main__":
+    args = parse_arguments()
+    view_trained_reward_traj(path=args.path, perturb_path=args.perturb_path)
