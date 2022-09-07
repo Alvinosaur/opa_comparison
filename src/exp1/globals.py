@@ -57,11 +57,19 @@ start_poses = [
     np.array([0.2, 0.35, -0.08]),
     np.array([0.2, 0.35, -0.08]),
 
+    # extreme diff settings
+    np.array([0.5, -0.4, -0.3]),
+    np.array([-0.7, 0.8, 0.5]),
+
 ]
 start_ori_quats = [
     np.array([0, 1., 0, 0]),
     np.array([0, 1., 0, 0]),
     np.array([0, 1., 0, 0]),
+
+    # some random quats
+    np.array([0.46765938, 0.26540881, -0.84267767, 0.0273354]),
+    np.array([0.54350796, -0.02228003, -0.83859095, -0.02946044]),
 ]
 start_joints_all = [
     np.array([270.271, 68.32, 221.0, 241.136, 91.637, 36.716, 18.348]),
@@ -74,6 +82,9 @@ goal_poses = [
     np.array([0.4, -0.475, 0.1]),
     np.array([0.4, -0.475, 0.1]),
     np.array([0.4, -0.475, 0.1]),
+
+    np.array([0.5, 0.3, 0.4]),
+    np.array([-0.3, 0.5, -0.4]),
 ]
 goal_ori_quats = start_ori_quats
 goal_joints_all = [
@@ -86,9 +97,17 @@ inspection_poses = [
     np.array([0.7, 0.1, 0.05]),  # sitting at center of table
     np.array([0.6, -0.2, 0.4]),   # standing at one corner of table
     np.array([0.6, 0.2, -0.1]),   # standing at another corner of table
+
+    # extreme diff settings
+    np.array([0.7, -0.1, 0.2]),
+    np.array([-0.4, 0.6, -0.2]),
 ]
 inspection_ori_quats = [
     R.from_euler("zyx", [0, 30, 0], degrees=True).as_quat(),
     R.from_euler("zyx", [-20, -20, 0], degrees=True).as_quat(),
     R.from_euler("zyx", [20, 40, 0], degrees=True).as_quat(),
+
+    # some random quats
+    np.array([-0.08406316, -0.49222364, -0.60447908, 0.62068858]),
+    np.array([0.31430839, -0.61724114, 0.12140935, 0.71097354]),
 ]

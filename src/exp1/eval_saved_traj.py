@@ -13,6 +13,16 @@ This file should be called on each of the final saved trajectories of FERL, OPA,
 # TODO: something like this but without the if statements since we will just create separate folders for each experiment.
 # trajectory reward function
 
+"""
+Commands:
+OPA:
+python eval_saved_traj.py --trials_folder opa_saved_trials_inspection/eval --perturb_folder opa_saved_trials_inspection/perturb_collection
+
+Unified:
+python eval_saved_traj.py --trials_folder unified_saved_trials_inspection/eval --perturb_folder unified_saved_trials_inspection/perturb_collection
+
+"""
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -42,17 +52,12 @@ def calc_regret(traj, human_pose, desired_rot_offset=DESIRED_ROT_OFFSET):
     #     # error in orientation
     #     regret += rot_weight * np.arccos(np.abs(traj[i, 3:] @ desired_rot))
 
-    regret = dist_weight * np.min(np.linalg.norm(
+    regret = (0.56 / 0.33) * np.min(np.linalg.norm(
         traj[:, 0:3] - human_pose[np.newaxis, 0:3], axis=-1))
 
-    import ipdb
-    ipdb.set_trace()  # TODO: verify below and verify dist_weight/rot_weight
+    # (T x 4) * (4,) = (T,)
     regret += rot_weight * np.min(
-        np.arccos(
-            np.abs(
-                np.einsum("ti,tj->t", traj[:, 3:], desired_rot[np.newaxis, :])
-            )
-        )
+        np.arccos(np.abs(traj[:, 3:] @ desired_rot))
     )
 
     return regret
@@ -61,9 +66,24 @@ def calc_regret(traj, human_pose, desired_rot_offset=DESIRED_ROT_OFFSET):
 if __name__ == "__main__":
     args = parse_arguments()
     num_exps = len(start_poses)
+
+    # ! NOTE: always apply perturb at 0th iter for 0th human pose config
+    exp_iter = 0
     perturb_traj = np.load(os.path.join(
-        args.perturb_folder, "perturb_traj_iter_1_num_0.npy"))
-    desired_rot_offset = perturb_traj[-1, 3:]
+        args.perturb_folder, f"perturb_traj_iter_{exp_iter}_num_0.npy"))
+    inpsection_ori_quat = inspection_ori_quats[exp_iter]
+
+    # Right-multiply rotational offset with inspection to get relative to inspector pose
+    # R_perturb = R_inspection * R_desired_offset
+    # -> (rearrange) R_perturb * inv(R_inspection)= R_desired_offset
+    # You can verify this makes sense by plotting with plot_ee_traj.py
+    # which shows the estimatedd desired orientation
+    desired_rot_offset = (
+        R.from_quat(perturb_traj[-1, 3:]) *
+        R.from_quat(inpsection_ori_quat).inv()).as_quat()
+    import ipdb
+    ipdb.set_trace()
+
     total_cost = 0.0
     for exp_iter in range(num_exps):
         inspection_pos_world = inspection_poses[exp_iter]

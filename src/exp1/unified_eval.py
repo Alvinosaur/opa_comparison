@@ -109,8 +109,8 @@ if __name__ == "__main__":
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
-        exp_iter = min(exp_iter, num_exps - 1)
-        extra_mass = extra_masses[exp_iter]
+        # exp_iter = min(exp_iter, num_exps - 1)
+        # extra_mass = extra_masses[exp_iter]
 
         # Set start robot pose
         start_pos = start_poses[exp_iter]
@@ -150,6 +150,7 @@ if __name__ == "__main__":
         # initialize target pose variables
         cur_pos = np.copy(start_pose[0:3])
         cur_ori_euler = np.copy(start_pose[3:])
+        cur_ori_quat = R.from_euler("XYZ", cur_ori_euler).as_quat()
 
         intervene_count = 0
         pose_error = 1e10
@@ -158,39 +159,31 @@ if __name__ == "__main__":
 
         ee_pose_traj = []
         prev_pose_quat = None
-        # modified MPC Fashion: run trajopt every K steps
-        K = 10
         step = 0
-        start_t = time.time()
-        total_num_steps = 20
-        t_per_step = (waypts_time[-1] - waypts_time[0]) / total_num_steps
-        while (not rospy.is_shutdown() and pose_error > pose_error_tol and
-                (pose_error > max_pose_error_tol)):
+        max_steps = 100
+        dt = 0.3
+        while (pose_error > pose_error_tol and
+                (pose_error > max_pose_error_tol) and step < max_steps):
             step += 1
-            print(step)
-
             # calculate next action to take based on planned traj
-            cur_pose_quat = np.concatenate(
-                [cur_pos, R.from_euler("XYZ", cur_ori_euler).as_quat()])
             cur_pose = np.concatenate([cur_pos, cur_ori_euler])
+            cur_pose_quat = np.concatenate([cur_pos, cur_ori_quat])
             pose_error = calc_pose_error(
                 goal_pose_quat, cur_pose_quat, rot_scale=0)
-            if prev_pose_quat is not None:
-                del_pose = calc_pose_error(prev_pose_quat, cur_pose_quat)
-                del_pose_running_avg.update(del_pose)
 
             ee_pose_traj.append(cur_pose_quat.copy())
 
-            # calculate new action
-            override_pred_delay = False
             local_target_pose = traj.interpolate(
-                t=step * t_per_step).flatten()
+                t=step * dt).flatten()
             local_target_pos = local_target_pose[0:3]
-            local_target_ori = local_target_pose[3:]
+            local_target_ori_quat = R.from_euler(
+                "XYZ", local_target_pose[3:]).as_quat()
 
             cur_pos = local_target_pos
-            cur_ori_euler = local_target_ori
+            cur_ori_quat = local_target_ori_quat
+            cur_ori_euler = local_target_pose[3:]
 
+            print("dist_to_goal: ", pose_error)
             prev_pose_quat = np.copy(cur_pose_quat)
 
         # Save robot traj and intervene traj

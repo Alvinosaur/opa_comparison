@@ -230,8 +230,8 @@ if __name__ == "__main__":
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
-        exp_iter = min(exp_iter, num_exps - 1)
-        extra_mass = extra_masses[exp_iter]
+        # exp_iter = min(exp_iter, num_exps - 1)
+        # extra_mass = extra_masses[exp_iter]
 
         # Set start robot pose
         start_pos_world = start_poses[exp_iter]
@@ -275,8 +275,11 @@ if __name__ == "__main__":
         ee_pose_traj = []
 
         prev_pose_world = None
+        step = 0
+        max_steps = 50
         while (not rospy.is_shutdown() and pose_error > pose_error_tol and
-                (pose_error > max_pose_error_tol)):
+                (pose_error > max_pose_error_tol) and step < max_steps):
+            step += 1
             cur_pose_world = np.concatenate(
                 [cur_pos.copy(), cur_ori_quat.copy()])
             cur_pos_net = cur_pos * World2Net
@@ -352,3 +355,9 @@ if __name__ == "__main__":
         print(
             f"Finished! Error {pose_error} vs tol {pose_error_tol}, \nderror {del_pose_running_avg.avg} vs tol {del_pose_tol}")
         print("Opening gripper to release item")
+
+"""
+Run in opa_comparison/src folder (NOT in individual exp folder):
+
+python exp1/unified_eval.py --collected_folder exp1/unified_saved_trials_inspection/perturb_collection 
+"""
