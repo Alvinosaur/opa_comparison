@@ -98,9 +98,9 @@ goal_joints_all = [
 ]
 
 obstacle_poses = [
-    # obstacle 1
-    # np.array([0.34, -0.01, 0.12]),
-    # np.array([0.34, -0.01, 0.12]),
+    # # obstacle 1
+    # np.array([0.34, -0.01, 0.1]),
+    # np.array([0.34, -0.01, 0.1]),
 
     # obstacle 2
     np.array([0.36, -0.026, 0.37]),
@@ -110,3 +110,6 @@ obstacle_poses = [
 
 obstacle_ori_quats = [np.array([0, 0, 0, 1.])
                       for _ in range(len(obstacle_poses))]
+
+
+goal_radius_scale_custom = 0.4

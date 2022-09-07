@@ -48,7 +48,7 @@ else:
     dstep = 0.12
     ros_delay = 0.4  # NOTE: if modify this, must also modify rolling avg window of dpose
 
-obstacle_radii = np.array([1.5])[:, np.newaxis]  # defined on net scale
+obstacle_radii = np.array([2.5])[:, np.newaxis]  # defined on net scale
 goal_rot_radius = np.array([4.0])
 obstacle_rot_radii = np.array([0])
 
