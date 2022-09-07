@@ -36,7 +36,7 @@ DEVICE = "cpu"
 print("DEVICE: %s" % DEVICE)
 
 # Hyperparameters
-TRAJ_LEN = 10  # fixed number of wayponts for trajopt
+TRAJ_LEN = 30  # fixed number of wayponts for trajopt
 waypts_time = np.linspace(0, T, TRAJ_LEN)
 adapt_num_epochs = 5
 
@@ -92,6 +92,8 @@ if __name__ == "__main__":
     save_folder = f"exp1/unified_saved_trials_inspection/eval"
     os.makedirs(save_folder, exist_ok=True)
 
+    load_folder = f"exp1/unified_saved_trials_inspection/perturb_collection"
+
     # Define reward model
     state_dim = 3 + 3  # (pos, rot euler)
     # context: human pose
@@ -99,6 +101,7 @@ if __name__ == "__main__":
     input_dim = state_dim + context_dim  # robot pose, human pose
     rm1 = TrainReward(model_dim=(input_dim, 128),
                       epoch=500, traj_len=TRAJ_LEN, device=DEVICE)
+    rm1.load(folder=load_folder, name="exp_0_adapt_iter_0")
 
     it = 0
     pose_error_tol = 0.1
