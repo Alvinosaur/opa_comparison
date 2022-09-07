@@ -324,9 +324,9 @@ if __name__ == "__main__":
                         "obj_rot_feats": best_rot_feats,
                         "obj_rot_offsets": best_rot_offsets
                     },
-                    f"exp2_saved_weights_iter_{exp_iter}_num_{intervene_count}.pth"
+                    f"{save_folder}/exp2_saved_weights_iter_{exp_iter}_num_{intervene_count}.pth"
                 )
-                np.save(f"perturb_traj_iter_{exp_iter}_num_{intervene_count}",
+                np.save(f"{save_folder}/perturb_traj_iter_{exp_iter}_num_{intervene_count}",
                         kinova.perturb_pose_traj)
 
                 # reset the intervention data
