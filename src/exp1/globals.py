@@ -27,10 +27,6 @@ DROP_OFF_OFFSET = np.array([0.0, 0.0, -0.1])
 T = 20.0  # taken from FERL yaml file
 goal_radius_scale_custom = 0.45
 
-# Only for ablation studies requiring predefined features and
-# evaluation of final behavior
-DESIRED_ROT_OFFSET = R.from_euler("XYZ", [0, 0, np.pi]).as_quat()
-
 # Item ID's (if item == can, slide into grasp pose horizontally)
 BOX_ID = 0
 CAN_ID = 1

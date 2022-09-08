@@ -227,6 +227,7 @@ if __name__ == "__main__":
 
     num_exps = len(start_poses)
     # num_exps = 3
+    num_repeats = 10  # with random noise added to each step
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
