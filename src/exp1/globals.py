@@ -25,7 +25,7 @@ HOME_JOINTS = np.array([-0.705, 0.952, -1.663, -1.927, 2.131, 1.252, -0.438])
 POS_DIM = 3
 DROP_OFF_OFFSET = np.array([0.0, 0.0, -0.1])
 T = 20.0  # taken from FERL yaml file
-goal_radius_scale_custom = 0.4
+goal_radius_scale_custom = 0.45
 
 # Only for ablation studies requiring predefined features and
 # evaluation of final behavior
@@ -117,9 +117,9 @@ inspection_poses = [
     np.array([0.6, 0.2, -0.1]),   # standing at another corner of table
 
     # extreme diff settings
-    np.array([0.4, -0.2, 0.4]),
+    np.array([0.5, -0.1, 0.4]),
     np.array([0.0, 0.0, 0.1]),
-    np.array([0.2, 0.0, -0.1]),
+    np.array([0.2, 0.15, -0.1]),
 ]
 inspection_ori_quats = [
     R.from_euler("zyx", [0, 30, 0], degrees=True).as_quat(),
