@@ -113,7 +113,7 @@ if __name__ == "__main__":
     del_pose_tol = 0.005  # over del_pose_interval iterations
     num_exps = len(start_poses)
     # num_exps = 3
-    for exp_iter in range(num_exps):
+    for exp_iter in range(1):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
         # exp_iter = min(exp_iter, num_exps - 1)
@@ -148,7 +148,7 @@ if __name__ == "__main__":
                 perturb_pose_traj_quat[:, 0:3],
                 R.from_quat(perturb_pose_traj_quat[:, 3:]).as_euler("XYZ")
             ])
-            num_wpts = 100
+            num_wpts = 40
             perturb_pose_traj_euler = Trajectory(
                 waypts=perturb_pose_traj_euler,
                 waypts_time=np.linspace(0, num_wpts, len(perturb_pose_traj_euler))).downsample(num_waypts=num_wpts).waypts
@@ -173,7 +173,7 @@ if __name__ == "__main__":
         local_target_ori_quat = R.from_euler(
             "XYZ", traj.waypts[0, 3:]).as_quat()
 
-        for rand_trial in range(10):
+        for rand_trial in range(1):
             # initialize target pose variables
             cur_pos = np.copy(start_pose[0:3])
             cur_ori_euler = np.copy(start_pose[3:])

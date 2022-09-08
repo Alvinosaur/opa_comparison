@@ -345,7 +345,8 @@ if __name__ == "__main__":
                 pos_std = 0.01
                 rot_euler_std = 2 * np.pi / 180
                 pos_noise = np.random.normal(loc=0, scale=pos_std, size=3)
-                rot_noise = np.random.normal(loc=0, scale=rot_euler_std, size=3)
+                rot_noise = np.random.normal(
+                    loc=0, scale=rot_euler_std, size=3)
                 cur_pos = local_target_pos_world + pos_noise
                 cur_ori_quat = R.from_euler("XYZ",
                                             R.from_quat(interp_rot).as_euler(
@@ -365,5 +366,5 @@ if __name__ == "__main__":
 """
 Run in opa_comparison/src folder (NOT in individual exp folder):
 
-python exp1/unified_eval.py --collected_folder exp1/unified_saved_trials_inspection/perturb_collection
+python exp1/opa_eval.py --collected_folder exp1/opa_saved_trials_inspection/perturb_collection
 """
