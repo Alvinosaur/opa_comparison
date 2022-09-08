@@ -44,13 +44,6 @@ def calc_regret(traj, human_pose, desired_rot_offset=DESIRED_ROT_OFFSET):
     # NOTE: right-multiply rot offset to get relative to human pose
     desired_rot = (R.from_quat(human_pose[3:]) *
                    R.from_quat(desired_rot_offset)).as_quat()
-    # regret = 0
-    # for i in range(len(traj)):
-    #     # distance from human
-    #     regret += dist_weight * np.linalg.norm(traj[i, 0:3] - human_pose[0:3])
-
-    #     # error in orientation
-    #     regret += rot_weight * np.arccos(np.abs(traj[i, 3:] @ desired_rot))
 
     regret = (0.56 / 0.33) * np.min(np.linalg.norm(
         traj[:, 0:3] - human_pose[np.newaxis, 0:3], axis=-1))

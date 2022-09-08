@@ -6,6 +6,7 @@ from unified_model import StateFunction
 from torch.optim import Adam
 from torch.nn.utils.convert_parameters import parameters_to_vector
 import matplotlib.pyplot as plt
+import time
 
 from tqdm import tqdm
 
@@ -66,7 +67,7 @@ class TrainReward(object):
         xi_deformed[start_idx:, :self.action_dim] += gamma[:N - start_idx, :]
         return xi_deformed
 
-    def train_rewards(self, demos, context, load_paths=None):
+    def train_rewards(self, demos, context, load_paths=None, max_time=None):
         if load_paths is not None:
             for i, path in enumerate(load_paths):
                 self.reward_models[i].load_state_dict(torch.load(path))
@@ -75,15 +76,21 @@ class TrainReward(object):
             self.device).to(torch.float32) for demo in demos]
         context_tensor = torch.from_numpy(
             context).to(self.device).to(torch.float32)
+
+        if max_time:
+            max_time_per_model = max_time / self.n_models
+        else:
+            max_time_per_model = None
         avg_loss = sum([
             self.train_reward(demos, demos_tensor,
-                              context_tensor, self.reward_models[i])
+                              context_tensor, self.reward_models[i],
+                              max_time=max_time_per_model)
             for i in range(self.n_models)]) / self.n_models
 
         return avg_loss
 
     # train the reward model
-    def train_reward(self, demos, demos_tensor, context_tensor, reward_model):
+    def train_reward(self, demos, demos_tensor, context_tensor, reward_model, max_time):
         optim = Adam(reward_model.parameters(), lr=self.LR)
         scheduler = torch.optim.lr_scheduler.StepLR(optim,
                                                     step_size=self.LR_STEP_SIZE, gamma=self.LR_GAMMA)
@@ -97,6 +104,7 @@ class TrainReward(object):
         assert num_demos == 1  # NOTE: temporary, debugging
         demo_orig = demos[0].copy()
 
+        start_time = time.time()  # adaptation time includes generating data
         num_deforms = 1000
         deformed = []
         for _ in tqdm(range(num_deforms)):
@@ -108,11 +116,15 @@ class TrainReward(object):
         np.save("deformed.npy", deformed)
         print("generating deformed trajectories... DONE!")
 
+        loss_reward = None
         for epoch in tqdm(range(self.EPOCH)):
             logits_1 = torch.Tensor([])
             logits_2 = torch.Tensor([])
 
             for _ in range(self.batch_size):
+                if max_time is not None and time.time() - start_time > max_time:
+                    return loss_reward.item()
+
                 demo_idx = np.random.randint(0, num_demos)
                 demo_orig = demos[demo_idx].copy()
                 demo_orig_tensor = demos_tensor[demo_idx]
