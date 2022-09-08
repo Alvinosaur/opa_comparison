@@ -303,7 +303,7 @@ if __name__ == "__main__":
                 # goal
                 goal_tensor = torch.from_numpy(
                     pose_to_model_input(goal_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
-                goal_radii = goal_radius_scale * torch.norm(
+                goal_radii = goal_radius_scale_custom * torch.norm(
                     goal_tensor[:, :pos_dim] -
                     cur_pose_tensor[:, :pos_dim],
                     dim=-1).unsqueeze(0)
