@@ -36,7 +36,7 @@ DEVICE = "cpu"
 print("DEVICE: %s" % DEVICE)
 
 # Hyperparameters
-TRAJ_LEN = 30  # fixed number of wayponts for trajopt
+TRAJ_LEN = 10  # fixed number of wayponts for trajopt
 waypts_time = np.linspace(0, T, TRAJ_LEN)
 adapt_num_epochs = 5
 
@@ -105,7 +105,7 @@ if __name__ == "__main__":
     input_dim = state_dim + context_dim  # robot pose, human pose
     rm1 = TrainReward(model_dim=(input_dim, 128),
                       epoch=2000, traj_len=TRAJ_LEN, device=DEVICE)
-    # rm1.load(folder=load_folder, name="exp_0_adapt_iter_0")
+    rm1.load(folder=load_folder, name="exp_0_adapt_iter_0")
 
     it = 0
     pose_error_tol = 0.1
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     del_pose_tol = 0.005  # over del_pose_interval iterations
     num_exps = len(start_poses)
     # num_exps = 3
-    for exp_iter in range(1):
+    for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
         # exp_iter = min(exp_iter, num_exps - 1)
@@ -140,7 +140,8 @@ if __name__ == "__main__":
         inspection_pose_euler = np.concatenate(
             [inspection_pos, inspection_ori_euler])
 
-        if exp_iter == 0:
+        #  TODO: REMOVE
+        if exp_iter == -1:
             # run training on 0th exp_iter
             perturb_pose_traj_quat = np.load(os.path.join(
                 load_folder, "perturb_traj_iter_0_num_0.npy"))
@@ -173,7 +174,16 @@ if __name__ == "__main__":
         local_target_ori_quat = R.from_euler(
             "XYZ", traj.waypts[0, 3:]).as_quat()
 
-        for rand_trial in range(1):
+        # traj = traj.waypts.copy()
+        # traj = np.hstack([
+        #     traj[:, 0:3],
+        #     R.from_euler("XYZ", traj[:, 3:]).as_quat()
+        # ])
+        # np.save(
+        #     f"{save_folder}/ee_pose_traj_iter_{0}_rand_trial_{0}.npy", traj)
+        # exit()
+
+        for rand_trial in range(10):
             # initialize target pose variables
             cur_pos = np.copy(start_pose[0:3])
             cur_ori_euler = np.copy(start_pose[3:])
@@ -187,7 +197,7 @@ if __name__ == "__main__":
             prev_pose_quat = None
             step = 0
             max_steps = 100
-            dt = 0.3
+            dt = 0.5
             while (pose_error > pose_error_tol and
                     (pose_error > max_pose_error_tol) and step < max_steps):
                 step += 1
