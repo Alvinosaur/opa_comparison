@@ -25,7 +25,7 @@ HOME_JOINTS = np.array([-0.705, 0.952, -1.663, -1.927, 2.131, 1.252, -0.438])
 POS_DIM = 3
 DROP_OFF_OFFSET = np.array([0.0, 0.0, -0.1])
 T = 5.0  # taken from FERL yaml file
-goal_radius_scale_custom = 0.4
+goal_radius_scale_custom = 0.45
 
 # Item ID's (if item == can, slide into grasp pose horizontally)
 BOX_ID = 0
@@ -108,7 +108,7 @@ goal_joints_all = [
 ]
 
 inspection_poses = [
-    np.array([0.7, 0.1, 0.05]),  # sitting at center of table
+    np.array([0.6, 0.1, 0.05]),  # sitting at center of table
     np.array([0.6, -0.2, 0.4]),   # standing at one corner of table
     np.array([0.6, 0.2, -0.1]),   # standing at another corner of table
 

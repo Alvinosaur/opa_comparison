@@ -141,7 +141,7 @@ def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adap
             "No major position perturbation, skipping position adaptation...")
     else:
         best_pos_feats, _, _ = random_seed_adaptation(policy, all_processed_samples, train_pos=True, train_rot=False,
-                                                      is_3D=True, num_objects=num_objects, loss_prop_tol=0.8,
+                                                      is_3D=True, num_objects=num_objects, loss_prop_tol=1.0,
                                                       pos_feat_max=pos_feat_max, pos_feat_min=pos_feat_min,
                                                       rot_feat_max=rot_feat_max, rot_feat_min=rot_feat_min,
                                                       pos_requires_grad=pos_requires_grad,
