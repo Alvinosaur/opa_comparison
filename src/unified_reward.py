@@ -67,7 +67,7 @@ class TrainReward(object):
         xi_deformed[start_idx:, :self.action_dim] += gamma[:N - start_idx, :]
         return xi_deformed
 
-    def train_rewards(self, demos, context, load_paths=None, max_time=None):
+    def train_rewards(self, deformed, demos, context, load_paths=None, max_time=None):
         if load_paths is not None:
             for i, path in enumerate(load_paths):
                 self.reward_models[i].load_state_dict(torch.load(path))
@@ -77,20 +77,22 @@ class TrainReward(object):
         context_tensor = torch.from_numpy(
             context).to(self.device).to(torch.float32)
 
-        if max_time:
+        if max_time is not None:
             max_time_per_model = max_time / self.n_models
         else:
             max_time_per_model = None
         avg_loss = sum([
-            self.train_reward(demos, demos_tensor,
-                              context_tensor, self.reward_models[i],
+            self.train_reward(deformed=deformed, demos=demos, demos_tensor=demos_tensor,
+                              context_tensor=context_tensor, reward_model=self.reward_models[i],
                               max_time=max_time_per_model)
             for i in range(self.n_models)]) / self.n_models
 
         return avg_loss
 
     # train the reward model
-    def train_reward(self, demos, demos_tensor, context_tensor, reward_model, max_time):
+    def train_reward(self, deformed, demos, demos_tensor, context_tensor, reward_model, max_time):
+
+        start_time = time.time()  # adaptation time includes generating data
         optim = Adam(reward_model.parameters(), lr=self.LR)
         scheduler = torch.optim.lr_scheduler.StepLR(optim,
                                                     step_size=self.LR_STEP_SIZE, gamma=self.LR_GAMMA)
@@ -99,30 +101,18 @@ class TrainReward(object):
         base_labels = torch.zeros(
             self.batch_size, device=self.device, dtype=torch.long)
 
-        # generate deformed trajectories beforehand to reduce training time
-        print("generating deformed trajectories...")
-        assert num_demos == 1  # NOTE: temporary, debugging
-        demo_orig = demos[0].copy()
+        print("Time to train: ", max_time)
 
-        start_time = time.time()  # adaptation time includes generating data
-        num_deforms = 1000
-        deformed = []
-        for _ in tqdm(range(num_deforms)):
-            rand_noise = np.random.normal(0, self.noise, self.action_dim)
-            demo_deformed = self.deform(demo_orig, rand_noise)
-            demo_deformed_tensor = torch.from_numpy(
-                demo_deformed).to(self.device).to(torch.float32)
-            deformed.append(demo_deformed_tensor)
-        np.save("deformed.npy", deformed)
-        print("generating deformed trajectories... DONE!")
-
+        # separate time for deform and training
+        num_deforms = len(deformed)
+        start_time = time.time()
         loss_reward = None
         for epoch in tqdm(range(self.EPOCH)):
-            logits_1 = torch.Tensor([])
-            logits_2 = torch.Tensor([])
+            logits_12 = []
 
             for _ in range(self.batch_size):
-                if max_time is not None and time.time() - start_time > max_time:
+                if max_time is not None and time.time() - start_time > max_time and loss_reward is not None:
+                    # At least one epoch
                     return loss_reward.item()
 
                 demo_idx = np.random.randint(0, num_demos)
@@ -138,11 +128,9 @@ class TrainReward(object):
                 R_deformed = torch.sum(reward_model(
                     torch.cat([demo_deformed_tensor, context_tensor], dim=-1)
                 )).unsqueeze(0)
-                logits_1 = torch.cat((logits_1, R_orig), dim=0)
-                logits_2 = torch.cat((logits_2, R_deformed), dim=0)
+                logits_12.append(torch.cat([R_orig, R_deformed]))
 
-            logits_12 = torch.cat(
-                (logits_1.unsqueeze(1), logits_2.unsqueeze(1)), dim=1)
+            logits_12 = torch.stack(logits_12)
             loss_cmp = self.loss_cal(logits_12, base_labels)
             loss_l2 = self.L2_RATIO * \
                 parameters_to_vector(reward_model.parameters()).norm() ** 2
@@ -161,7 +149,7 @@ class TrainReward(object):
     # use the ensemble reward models
     def reward(self, state):
         return sum([
-            reward_model(state).sum().item() for reward_model in self.reward_models]) / self.n_models
+            reward_model(state.to(self.device)).sum().item() for reward_model in self.reward_models]) / self.n_models
 
     def save(self, folder, name):
         for i in range(self.n_models):

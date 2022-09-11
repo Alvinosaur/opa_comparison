@@ -7,9 +7,9 @@ from scipy.optimize import LinearConstraint, NonlinearConstraint
 
 class TrajOptBase(object):
 
-    def __init__(self, home, goal, use_state_features, waypoints=10,
-                 max_iter=1000, eps=1e-3):
-        self.n_waypoints = waypoints
+    def __init__(self, home, goal, use_state_features, dstep,
+                 max_iter=100, eps=1e-3, est_dist=None):
+        self.dstep = dstep
         self.home = home
         self.goal = goal
         self.use_state_features = use_state_features
@@ -19,6 +19,9 @@ class TrajOptBase(object):
         self.state_dim = len(self.home)
 
         # initial seed trajectory as linear interp from start to goal
+        if est_dist is None:
+            est_dist = np.linalg.norm(home[0:3] - goal[0:3])
+        self.n_waypoints = max(int(np.ceil(est_dist / dstep)), 2)  # at least two steps: start and goal
         self.xi0 = np.zeros((self.n_waypoints, self.state_dim))
         for idx in range(self.n_waypoints):
             self.xi0[idx, :] = self.home + idx / \
@@ -45,7 +48,7 @@ class TrajOptBase(object):
 
         # constrain max change between waypoints
         self.pos_action_con = NonlinearConstraint(
-            self.pos_action_con_func, -0.1, 0.1)
+            self.pos_action_con_func, -dstep, dstep)
         self.rot_action_con = NonlinearConstraint(
             self.rot_action_con_func, -0.8, 0.8)
 
@@ -78,7 +81,7 @@ class TrajOptBase(object):
         states = torch.FloatTensor(states)
         R_learned = reward_model.reward(states)
 
-        avoid_stuck_weight = 1.0  # TODO: tune
+        avoid_stuck_weight = 0
         R_avoid_stuck = avoid_stuck_weight * np.linalg.norm(
             xi[1:, 0:3] - xi[0:-1, 0:3], axis=-1).sum()
         cost = -(R_learned + R_avoid_stuck)
@@ -88,12 +91,12 @@ class TrajOptBase(object):
     def optimize(self, reward_model, context, method='SLSQP'):
         # "context" seems to be some goal or target (see trajcost_true())
         # fed into self.reward_model.reward() network as context (see trajcost())
-        print("Trajectory Optimization...")
+        # print("Trajectory Optimization...")
         res = minimize(lambda x: self.trajcost(reward_model, context, x) if reward_model else None,
                        self.xi0, method=method, constraints=self.constraints,
                        options={'eps': self.eps, 'maxiter': self.max_iter}
                        )
-        print("Trajectory Optimization... DONE!")
+        # print("Trajectory Optimization... DONE!")
 
         xi = res.x.reshape(self.n_waypoints, self.state_dim)
         return xi
