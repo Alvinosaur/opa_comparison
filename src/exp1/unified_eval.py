@@ -33,10 +33,16 @@ Net2World = 1 / World2Net
 DEBUG = True
 dstep = 0.05
 ros_delay = 0.1
-demo_deformed_traj_len = 40
 
 DEVICE = "cuda:0"
 print("DEVICE: %s" % DEVICE)
+
+# Hyperparameters
+T = 5.0
+TRAJ_LEN = 10  # fixed number of wayponts for trajopt
+waypts_time = np.linspace(0, T, TRAJ_LEN)
+adapt_num_epochs = 5
+
 
 class TrajOptExp(TrajOptBase):
     # experiment-specific oracle reward function used to generate "optimal"
@@ -115,10 +121,11 @@ def run_adaptation(rm, collected_folder, num_perturbs, max_adaptation_time_sec):
 
     # Data processing
     all_processed_perturb_pose_traj = []
+    num_wpts = 40
     for perturb_pose_traj_euler in all_perturb_pose_traj:
         perturb_pose_traj_euler = Trajectory(
             waypts=perturb_pose_traj_euler,
-            waypts_time=np.linspace(0, demo_deformed_traj_len, len(perturb_pose_traj_euler))).downsample(num_waypts=demo_deformed_traj_len).waypts
+            waypts_time=np.linspace(0, num_wpts, len(perturb_pose_traj_euler))).downsample(num_waypts=num_wpts).waypts
 
         all_processed_perturb_pose_traj.append(perturb_pose_traj_euler)
 
@@ -140,7 +147,7 @@ def run_adaptation(rm, collected_folder, num_perturbs, max_adaptation_time_sec):
 
     # Perform adaptation
     context = inspection_pose_euler[np.newaxis, :].repeat(
-        demo_deformed_traj_len, axis=0)
+        num_wpts, axis=0)
 
     # include initial data processing in adaptation time
     if max_adaptation_time_sec is not None:
@@ -170,7 +177,7 @@ if __name__ == "__main__":
     context_dim = 1 + 3 + 3 if args.use_state_features else 3 + 3
     input_dim = state_dim + context_dim  # robot pose, human pose
     rm1 = TrainReward(model_dim=(input_dim, 128),
-                      epoch=2000, traj_len=demo_deformed_traj_len, device=DEVICE)
+                      epoch=2000, traj_len=TRAJ_LEN, device=DEVICE)
 
     # rm1.load(folder=load_folder, name="exp_0_adapt_iter_0")
     run_adaptation(rm1, collected_folder=load_folder, num_perturbs=args.num_perturbs,
@@ -209,17 +216,28 @@ if __name__ == "__main__":
         inspection_pose_euler = np.concatenate(
             [inspection_pos, inspection_ori_euler])
 
-        T = 5.0  # seconds
         trajopt = TrajOptExp(home=start_pose,
                              goal=goal_pose,
                              human_pose_euler=inspection_pose_euler,
                              context_dim=context_dim,
                              use_state_features=args.use_state_features,
-                             dstep=dstep)
-        traj_plan = trajopt.optimize(
-                context=inspection_pose_euler, reward_model=rm1)
-        traj_dist = np.linalg.norm(traj_plan[1:, 0:3] - traj_plan[:-1, 0:3], axis=-1).sum()
-        local_target_pose = None
+                             waypoints=TRAJ_LEN)
+        traj = Trajectory(
+            waypts=trajopt.optimize(
+                context=inspection_pose_euler, reward_model=rm1),
+            waypts_time=waypts_time)
+        local_target_pos = traj.waypts[0, 0:3]
+        local_target_ori_quat = R.from_euler(
+            "XYZ", traj.waypts[0, 3:]).as_quat()
+
+        # traj = traj.waypts.copy()
+        # traj = np.hstack([
+        #     traj[:, 0:3],
+        #     R.from_euler("XYZ", traj[:, 3:]).as_quat()
+        # ])
+        # np.save(
+        #     f"{save_folder}/ee_pose_traj_iter_{0}_rand_trial_{0}.npy", traj)
+        # exit()
 
         for rand_trial in range(10):
             # initialize target pose variables
@@ -236,8 +254,6 @@ if __name__ == "__main__":
             step = 0
             max_steps = 100
             dt = 0.5
-            import ipdb
-            ipdb.set_trace()
             while (pose_error > pose_error_tol and
                     (pose_error > max_pose_error_tol) and step < max_steps):
                 step += 1
@@ -247,45 +263,30 @@ if __name__ == "__main__":
                 cur_pose_quat = np.concatenate([cur_pos, cur_ori_quat])
                 pose_error = calc_pose_error(
                     goal_pose_quat, cur_pose_quat, rot_scale=0)
-                print("dist_to_goal: %.2f, num_wpts: %d" % (pose_error, traj_plan.shape[0]))
 
                 ee_pose_traj.append(cur_pose_quat.copy())
 
-                # always next step is the target, could the goal itelf
-                target_idx = 3
-                local_target_pos = traj_plan[target_idx, 0:3]  
-                local_target_ori_euler = traj_plan[target_idx, 3:]
+                local_target_pose = traj.interpolate(
+                    t=step * dt).flatten()
+                local_target_pos = local_target_pose[0:3]
+                local_target_ori_quat = R.from_euler(
+                    "XYZ", local_target_pose[3:]).as_quat()
 
                 # 0 mean pos_std noise
-                pos_std = 0 # 0.05
-                rot_euler_std = 0 # 5 * np.pi / 180
+                pos_std = 0.05
+                rot_euler_std = 5 * np.pi / 180
                 pos_noise = np.random.normal(loc=0, scale=pos_std, size=3)
                 rot_noise = np.random.normal(
                     loc=0, scale=rot_euler_std, size=3)
 
-                # simulate noise in achieving next target pose
                 cur_pos = local_target_pos + pos_noise
-                cur_ori_euler = local_target_ori_euler + rot_noise
-                cur_pose = np.concatenate([cur_pos, cur_ori_euler])
+                cur_ori_euler = local_target_pose[3:] + rot_noise
 
-                # MPC Fashion: regenerate trajectory starting from current pose
-                trajopt = TrajOptExp(home=cur_pose,
-                            goal=goal_pose,
-                            human_pose_euler=inspection_pose_euler,
-                            context_dim=context_dim,
-                            use_state_features=args.use_state_features,
-                            dstep=dstep)
-                traj_plan = trajopt.optimize(
-                        context=inspection_pose_euler, reward_model=rm1)
-                try:
-                    traj_dist = np.linalg.norm(traj_plan[target_idx:-1, 0:3] - traj_plan[target_idx+1:, 0:3], axis=-1).sum()
-                except:
-                    break  # close enough to call finished
-
+                print("dist_to_goal: ", pose_error)
                 prev_pose_quat = np.copy(cur_pose_quat)
 
             # Save robot traj and intervene traj
             np.save(
                 f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npy", ee_pose_traj)
 
-            print("FINISHED!")
+            print("Finished!")
