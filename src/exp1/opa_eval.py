@@ -34,7 +34,7 @@ dstep = 0.05
 ros_delay = 0.1
 
 inspection_radii = np.array([6.0])[:, np.newaxis]  # defined on net scale
-inspection_rot_radii = np.array([4.0])[:, np.newaxis]
+inspection_rot_radii = np.array([6.0])[:, np.newaxis]
 goal_rot_radius = np.array([4.0])
 
 
@@ -73,32 +73,21 @@ def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adap
 
     start_pos_world = start_poses[exp_iter]
     start_ori_quat = start_ori_quats[exp_iter]
-    start_pose_world = np.concatenate([start_pos_world, start_ori_quat])
     start_pose_net = np.concatenate(
         [start_pos_world * World2Net, start_ori_quat])
-    start_tensor = torch.from_numpy(
-        pose_to_model_input(start_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
 
     # Set goal robot pose
     goal_pos_world = goal_poses[exp_iter]
     goal_ori_quat = goal_ori_quats[exp_iter]
     goal_pose_net = np.concatenate(
         [goal_pos_world * World2Net, goal_ori_quat])
-    goal_pose_world = np.concatenate([goal_pos_world, goal_ori_quat])
 
     inspection_pos_world = inspection_poses[exp_iter]
     inspection_ori_quat = inspection_ori_quats[exp_iter]
     inspection_pose_net = np.concatenate(
         [World2Net * inspection_pos_world, inspection_ori_quat], axis=-1)[np.newaxis]
-    inspection_pose_tensor = torch.from_numpy(pose_to_model_input(
-        inspection_pose_net)).to(torch.float32).to(DEVICE)
 
     object_poses_net = inspection_pose_net
-    objects_tensor = inspection_pose_tensor
-    objects_torch = torch.cat(
-        [objects_tensor, object_radii_torch], dim=-1).unsqueeze(0)
-    objects_rot_torch = torch.cat(
-        [objects_tensor, object_rot_radii_torch], dim=-1).unsqueeze(0)
 
     # include initial data processing in adaptation time
     start_time = time.time()
@@ -289,7 +278,7 @@ if __name__ == "__main__":
         objects_rot_torch = torch.cat(
             [objects_tensor, object_rot_radii_torch], dim=-1).unsqueeze(0)
 
-        for rand_trial in range(1):
+        for rand_trial in range(10):
 
             # initialize target pose variables
             cur_pos = np.copy(start_pose_world[0:3])
