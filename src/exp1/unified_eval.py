@@ -164,7 +164,7 @@ if __name__ == "__main__":
     argparse_dict = vars(args)
 
     # define save path
-    save_folder = f"exp1/ferl_saved_trials_inspection/eval_perturbs_{args.num_perturbs}_time_{args.max_adaptation_time_sec}"
+    save_folder = f"exp1/unified_saved_trials_inspection/eval_perturbs_{args.num_perturbs}_time_{args.max_adaptation_time_sec}"
     os.makedirs(save_folder, exist_ok=True)
 
     # Instead of loading trained model, we train on the fly here so we
@@ -226,6 +226,8 @@ if __name__ == "__main__":
             waypts=trajopt.optimize(
                 context=inspection_pose_euler, reward_model=rm1),
             waypts_time=waypts_time)
+        np.save(
+                f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npy", ee_pose_traj)
         local_target_pos = traj.waypts[0, 0:3]
         local_target_ori_quat = R.from_euler(
             "XYZ", traj.waypts[0, 3:]).as_quat()
