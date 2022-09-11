@@ -253,6 +253,7 @@ if __name__ == "__main__":
     num_exps = len(start_poses)
     # num_exps = 3
     for exp_iter in range(num_exps):
+        print("NEW EXP ", exp_iter)
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
         # exp_iter = min(exp_iter, num_exps - 1)
@@ -288,7 +289,7 @@ if __name__ == "__main__":
         objects_rot_torch = torch.cat(
             [objects_tensor, object_rot_radii_torch], dim=-1).unsqueeze(0)
 
-        for rand_trial in range(10):
+        for rand_trial in range(1):
 
             # initialize target pose variables
             cur_pos = np.copy(start_pose_world[0:3])
