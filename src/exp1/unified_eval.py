@@ -227,7 +227,8 @@ if __name__ == "__main__":
                 context=inspection_pose_euler, reward_model=rm1),
             waypts_time=waypts_time)
         np.save(
-                f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npy", ee_pose_traj)
+                f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{0}.npy", traj.waypts)
+        continue
         local_target_pos = traj.waypts[0, 0:3]
         local_target_ori_quat = R.from_euler(
             "XYZ", traj.waypts[0, 3:]).as_quat()
