@@ -78,11 +78,63 @@ def parse_arguments():
     parser.add_argument('--collected_folder', action='store', type=str)
     parser.add_argument('--max_adaptation_time_sec',
                         action='store', type=float)
+    parser.add_argument('--num_perturbs', action='store',
+                        type=int, required=True)
     parser.add_argument('--use_state_features', action='store_true',
                         help="context are the same state features that OPA uses, not raw object state")
     args = parser.parse_args()
 
     return args
+
+
+def run_adaptation(rm, collected_folder, num_perturbs, max_adaptation_time_sec):
+    files = os.listdir(collected_folder)
+    exp_iter = None
+    all_perturb_pose_traj = []
+    for f in files:
+        matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
+        if len(matches) > 0:
+            exp_iter = int(matches[0])
+
+            if len(all_perturb_pose_traj) < num_perturbs:
+                perturb_pose_traj = np.load(os.path.join(
+                    collected_folder, f))
+                all_perturb_pose_traj.append(perturb_pose_traj)
+
+    # Set inspection pose
+    inspection_pos = inspection_poses[exp_iter]
+    inspection_ori_quat = inspection_ori_quats[exp_iter]
+    inspection_ori_euler = R.from_quat(inspection_ori_quat).as_euler("XYZ")
+    inspection_pose_euler = np.concatenate(
+        [inspection_pos, inspection_ori_euler])
+
+    start_time = time.time()
+
+    # include initial data processing in adaptation time
+    if max_adaptation_time_sec is not None:
+        max_adaptation_time_sec -= (time.time() - start_time)
+    else:
+        max_adaptation_time_sec = 1e10  # will still stop after max iters
+
+    all_processed_perturb_pose_traj = []
+    num_wpts = 40
+    for perturb_pose_traj_quat in all_perturb_pose_traj:
+        perturb_pose_traj_euler = np.hstack([
+            perturb_pose_traj_quat[:, 0:3],
+            R.from_quat(perturb_pose_traj_quat[:, 3:]).as_euler("XYZ")
+        ])
+
+        perturb_pose_traj_euler = Trajectory(
+            waypts=perturb_pose_traj_euler,
+            waypts_time=np.linspace(0, num_wpts, len(perturb_pose_traj_euler))).downsample(num_waypts=num_wpts).waypts
+
+        all_processed_perturb_pose_traj.append(perturb_pose_traj_euler)
+
+    # Perform adaptation
+    context = inspection_pose_euler[np.newaxis, :].repeat(
+        num_wpts, axis=0)
+    rm.train_rewards(all_processed_perturb_pose_traj,
+                     context=context, max_time=max_adaptation_time_sec)
 
 
 if __name__ == "__main__":
@@ -91,7 +143,7 @@ if __name__ == "__main__":
     argparse_dict = vars(args)
 
     # define save path
-    save_folder = f"exp1/unified_saved_trials_inspection/eval_{args.max_adaptation_time_sec}sec"
+    save_folder = f"exp1/ferl_saved_trials_inspection/eval_{args.max_adaptation_time_sec}sec"
     os.makedirs(save_folder, exist_ok=True)
 
     # Instead of loading trained model, we train on the fly here so we
@@ -105,7 +157,10 @@ if __name__ == "__main__":
     input_dim = state_dim + context_dim  # robot pose, human pose
     rm1 = TrainReward(model_dim=(input_dim, 128),
                       epoch=2000, traj_len=TRAJ_LEN, device=DEVICE)
-    rm1.load(folder=load_folder, name="exp_0_adapt_iter_0")
+
+    # rm1.load(folder=load_folder, name="exp_0_adapt_iter_0")
+    run_adaptation(rm1, collected_folder=load_folder, num_perturbs=args.num_perturbs,
+                   max_adaptation_time_sec=args.max_adaptation_time_sec)
 
     it = 0
     pose_error_tol = 0.1
@@ -139,26 +194,6 @@ if __name__ == "__main__":
         inspection_ori_euler = R.from_quat(inspection_ori_quat).as_euler("XYZ")
         inspection_pose_euler = np.concatenate(
             [inspection_pos, inspection_ori_euler])
-
-        #  TODO: REMOVE
-        if exp_iter == -1:
-            # run training on 0th exp_iter
-            perturb_pose_traj_quat = np.load(os.path.join(
-                load_folder, "perturb_traj_iter_0_num_0.npy"))
-            perturb_pose_traj_euler = np.hstack([
-                perturb_pose_traj_quat[:, 0:3],
-                R.from_quat(perturb_pose_traj_quat[:, 3:]).as_euler("XYZ")
-            ])
-            num_wpts = 40
-            perturb_pose_traj_euler = Trajectory(
-                waypts=perturb_pose_traj_euler,
-                waypts_time=np.linspace(0, num_wpts, len(perturb_pose_traj_euler))).downsample(num_waypts=num_wpts).waypts
-
-            # Perform adaptation and re-run trajopt
-            context = inspection_pose_euler[np.newaxis, :].repeat(
-                num_wpts, axis=0)
-            rm1.train_rewards([perturb_pose_traj_euler, ],
-                              context=context, max_time=args.max_adaptation_time_sec)
 
         trajopt = TrajOptExp(home=start_pose,
                              goal=goal_pose,

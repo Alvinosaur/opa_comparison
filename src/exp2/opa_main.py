@@ -179,16 +179,16 @@ if __name__ == "__main__":
     kinova.command_kinova_gripper(cmd_open=True)
     num_exps = len(start_poses)
 
-    # num_exps = 3
+    num_exps = 10
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
-        exp_iter = min(exp_iter, num_exps - 1)
-        extra_mass = extra_masses[exp_iter]
+        # exp_iter = min(exp_iter, num_exps - 1)
+        extra_mass = extra_masses[0]
 
         # Set start robot pose
-        start_pos_world = start_poses[exp_iter]
-        start_ori_quat = start_ori_quats[exp_iter]
+        start_pos_world = start_poses[0]
+        start_ori_quat = start_ori_quats[0]
         start_pose_world = np.concatenate([start_pos_world, start_ori_quat])
         start_pose_net = np.concatenate(
             [start_pos_world * World2Net, start_ori_quat])
@@ -196,14 +196,14 @@ if __name__ == "__main__":
             pose_to_model_input(start_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
 
         # Set goal robot pose
-        goal_pos_world = goal_poses[exp_iter]
-        goal_ori_quat = goal_ori_quats[exp_iter]
+        goal_pos_world = goal_poses[0]
+        goal_ori_quat = goal_ori_quats[0]
         goal_pose_net = np.concatenate(
             [goal_pos_world * World2Net, goal_ori_quat])
         goal_pose_world = np.concatenate([goal_pos_world, goal_ori_quat])
 
-        obstacle_pos_world = obstacle_poses[exp_iter]
-        obstacle_ori_quat = obstacle_ori_quats[exp_iter]
+        obstacle_pos_world = obstacle_poses[0]
+        obstacle_ori_quat = obstacle_ori_quats[0]
         obstacle_pose_net = np.concatenate(
             [World2Net * obstacle_pos_world, obstacle_ori_quat], axis=-1)[np.newaxis]
         obstacle_pose_tensor = torch.from_numpy(pose_to_model_input(
@@ -219,7 +219,7 @@ if __name__ == "__main__":
         if not DEBUG:
             kinova.reach_joints(HOME_JOINTS)
 
-        perform_grasp(start_pose_world, item_ids[exp_iter], kinova)
+        perform_grasp(start_pose_world, item_ids[0], kinova)
 
         # initialize target pose variables
         local_target_pos_world = np.copy(kinova.cur_pos)
@@ -292,40 +292,40 @@ if __name__ == "__main__":
                     f"exp2_pre_adaptation_saved_weights_iter_{exp_iter}_num_{intervene_count}.pth"
                 )
 
-                # Update position
-                print("Position:")
-                dist_perturbed = np.linalg.norm(
-                    perturb_pos_traj_world_interp[0] - perturb_pos_traj_world_interp[-1])
-                if dist_perturbed < 0.1:
-                    print(
-                        "No major position perturbation, skipping position adaptation...")
-                else:
-                    best_pos_feats, _, _ = random_seed_adaptation(policy, processed_sample, train_pos=True, train_rot=False,
-                                                                  is_3D=True, num_objects=num_objects, loss_prop_tol=0.8,
-                                                                  pos_feat_max=pos_feat_max, pos_feat_min=pos_feat_min,
-                                                                  rot_feat_max=rot_feat_max, rot_feat_min=rot_feat_min,
-                                                                  pos_requires_grad=pos_requires_grad)
+                # # Update position
+                # print("Position:")
+                # dist_perturbed = np.linalg.norm(
+                #     perturb_pos_traj_world_interp[0] - perturb_pos_traj_world_interp[-1])
+                # if dist_perturbed < 0.1:
+                #     print(
+                #         "No major position perturbation, skipping position adaptation...")
+                # else:
+                #     best_pos_feats, _, _ = random_seed_adaptation(policy, processed_sample, train_pos=True, train_rot=False,
+                #                                                   is_3D=True, num_objects=num_objects, loss_prop_tol=0.8,
+                #                                                   pos_feat_max=pos_feat_max, pos_feat_min=pos_feat_min,
+                #                                                   rot_feat_max=rot_feat_max, rot_feat_min=rot_feat_min,
+                #                                                   pos_requires_grad=pos_requires_grad)
 
-                # Update rotation
-                print("Rotation:")
-                _, best_rot_feats, best_rot_offsets = (
-                    random_seed_adaptation(policy, processed_sample, train_pos=False, train_rot=True,
-                                           is_3D=True, num_objects=num_objects, loss_prop_tol=0.2,
-                                           pos_feat_max=pos_feat_max, pos_feat_min=pos_feat_min,
-                                           rot_feat_max=rot_feat_max, rot_feat_min=rot_feat_min,
-                                           rot_requires_grad=rot_requires_grad))
+                # # Update rotation
+                # print("Rotation:")
+                # _, best_rot_feats, best_rot_offsets = (
+                #     random_seed_adaptation(policy, processed_sample, train_pos=False, train_rot=True,
+                #                            is_3D=True, num_objects=num_objects, loss_prop_tol=0.2,
+                #                            pos_feat_max=pos_feat_max, pos_feat_min=pos_feat_min,
+                #                            rot_feat_max=rot_feat_max, rot_feat_min=rot_feat_min,
+                #                            rot_requires_grad=rot_requires_grad))
 
-                policy.update_obj_feats(
-                    best_pos_feats, best_rot_feats, best_rot_offsets)
+                # policy.update_obj_feats(
+                #     best_pos_feats, best_rot_feats, best_rot_offsets)
 
-                torch.save(
-                    {
-                        "obj_pos_feats": best_pos_feats,
-                        "obj_rot_feats": best_rot_feats,
-                        "obj_rot_offsets": best_rot_offsets
-                    },
-                    f"{save_folder}/exp2_saved_weights_iter_{exp_iter}_num_{intervene_count}.pth"
-                )
+                # torch.save(
+                #     {
+                #         "obj_pos_feats": best_pos_feats,
+                #         "obj_rot_feats": best_rot_feats,
+                #         "obj_rot_offsets": best_rot_offsets
+                #     },
+                #     f"{save_folder}/exp2_saved_weights_iter_{exp_iter}_num_{intervene_count}.pth"
+                # )
                 np.save(f"{save_folder}/perturb_traj_iter_{exp_iter}_num_{intervene_count}",
                         kinova.perturb_pose_traj)
 

@@ -147,29 +147,30 @@ if __name__ == "__main__":
     perturb_pose_traj = []
     override_pred_delay = False
     num_exps = len(start_poses)
+    num_exps = 10
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
         exp_iter = min(exp_iter, num_exps - 1)
-        extra_mass = extra_masses[exp_iter]
+        extra_mass = extra_masses[0]
 
         # Set start robot pose
-        start_pos = start_poses[exp_iter]
-        start_ori_quat = start_ori_quats[exp_iter]
+        start_pos = start_poses[0]
+        start_ori_quat = start_ori_quats[0]
         start_ori_euler = R.from_quat(start_ori_quat).as_euler("XYZ")
         start_pose = np.concatenate([start_pos, start_ori_euler])
         start_pose_quat = np.concatenate([start_pos, start_ori_quat])
 
         # Set goal robot pose
-        goal_pos = goal_poses[exp_iter]
-        goal_ori_quat = goal_ori_quats[exp_iter]
+        goal_pos = goal_poses[0]
+        goal_ori_quat = goal_ori_quats[0]
         goal_ori_euler = R.from_quat(goal_ori_quat).as_euler("XYZ")
         goal_pose = np.concatenate([goal_pos, goal_ori_euler])
         goal_pose_quat = np.concatenate([goal_pos, goal_ori_quat])
 
         # Set inspection pose
-        inspection_pos = inspection_poses[exp_iter]
-        inspection_ori_quat = inspection_ori_quats[exp_iter]
+        inspection_pos = inspection_poses[0]
+        inspection_ori_quat = inspection_ori_quats[0]
         inspection_ori_euler = R.from_quat(inspection_ori_quat).as_euler("XYZ")
         inspection_pose_euler = np.concatenate(
             [inspection_pos, inspection_ori_euler])
@@ -177,7 +178,7 @@ if __name__ == "__main__":
         if not DEBUG:
             kinova.reach_joints(HOME_JOINTS)
 
-        perform_grasp(start_pose_quat, item_ids[exp_iter], kinova)
+        perform_grasp(start_pose_quat, item_ids[0], kinova)
 
         trajopt = TrajOptExp(home=start_pose,
                              goal=goal_pose,
@@ -279,12 +280,14 @@ if __name__ == "__main__":
                 # Perform adaptation and re-run trajopt
                 context = inspection_pose_euler[np.newaxis, :].repeat(
                     40, axis=0)
-                rm1.train_rewards([ perturb_pose_traj_euler, ], context=context)
+                
+                if exp_iter == 0:
+                    rm1.train_rewards([ perturb_pose_traj_euler, ], context=context)
 
-                # Save adapted reward model
-                rm1.save(folder=save_folder,
-                         name=f"exp_{exp_iter}_adapt_iter_{adapt_iter}")
-                adapt_iter += 1
+                    # Save adapted reward model
+                    rm1.save(folder=save_folder,
+                            name=f"exp_{exp_iter}_adapt_iter_{adapt_iter}")
+                    adapt_iter += 1
 
                 # Re-run trajopt at final, perturbed state
                 trajopt = TrajOptExp(home=cur_pose,

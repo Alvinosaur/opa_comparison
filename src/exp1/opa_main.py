@@ -41,7 +41,7 @@ signal.signal(signal.SIGINT, sigint_handler)
 World2Net = 10.0
 Net2World = 1 / World2Net
 
-DEBUG = True
+DEBUG = False
 if DEBUG:
     dstep = 0.05
     ros_delay = 0.1
@@ -274,16 +274,16 @@ if __name__ == "__main__":
     # can1 intervene rot finish, can2 watch, can3 stand up and watch
     kinova.command_kinova_gripper(cmd_open=True)
     num_exps = len(start_poses)
-    # num_exps = 3
+    num_exps = 10
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
-        exp_iter = min(exp_iter, num_exps - 1)
-        extra_mass = extra_masses[exp_iter]
+        # exp_iter = min(exp_iter, num_exps - 1)
+        extra_mass = extra_masses[0]
 
         # Set start robot pose
-        start_pos_world = start_poses[exp_iter]
-        start_ori_quat = start_ori_quats[exp_iter]
+        start_pos_world = start_poses[0]
+        start_ori_quat = start_ori_quats[0]
         start_pose_world = np.concatenate([start_pos_world, start_ori_quat])
         start_pose_net = np.concatenate(
             [start_pos_world * World2Net, start_ori_quat])
@@ -291,14 +291,14 @@ if __name__ == "__main__":
             pose_to_model_input(start_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
 
         # Set goal robot pose
-        goal_pos_world = goal_poses[exp_iter]
-        goal_ori_quat = goal_ori_quats[exp_iter]
+        goal_pos_world = goal_poses[0]
+        goal_ori_quat = goal_ori_quats[0]
         goal_pose_net = np.concatenate(
             [goal_pos_world * World2Net, goal_ori_quat])
         goal_pose_world = np.concatenate([goal_pos_world, goal_ori_quat])
 
-        inspection_pos_world = inspection_poses[exp_iter]
-        inspection_ori_quat = inspection_ori_quats[exp_iter]
+        inspection_pos_world = inspection_poses[0]
+        inspection_ori_quat = inspection_ori_quats[0]
         inspection_pose_net = np.concatenate(
             [World2Net * inspection_pos_world, inspection_ori_quat], axis=-1)[np.newaxis]
         inspection_pose_tensor = torch.from_numpy(pose_to_model_input(
@@ -314,7 +314,7 @@ if __name__ == "__main__":
         if not DEBUG:
             kinova.reach_joints(HOME_JOINTS)
 
-        perform_grasp(start_pose_world, item_ids[exp_iter], kinova)
+        perform_grasp(start_pose_world, item_ids[0], kinova)
 
         # initialize target pose variables
         local_target_pos_world = np.copy(kinova.cur_pos)

@@ -48,7 +48,7 @@ def draw_coordinate_frame(ax, T, R):
 def view_trained_reward_traj(perturb_path, path):
     ax = plt.axes(projection='3d')
 
-    exp_iter = int(re.findall("ee_pose_traj_iter_(\d+).npy", path)[0])
+    exp_iter = int(re.findall("ee_pose_traj_iter_(\d+)\S+", path)[0])
     perturb_iter = int(re.findall(
         "perturb_traj_iter_(\d+)_num_\d+.npy", perturb_path)[0])
     inspection_ori_quat_from_perturb = inspection_ori_quats[perturb_iter]

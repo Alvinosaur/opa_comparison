@@ -98,13 +98,13 @@ goal_joints_all = [
 ]
 
 obstacle_poses = [
-    # # obstacle 1
-    # np.array([0.34, -0.01, 0.1]),
-    # np.array([0.34, -0.01, 0.1]),
+    # obstacle 1
+    np.array([0.34, -0.01, 0.1]),
+    np.array([0.34, -0.01, 0.1]),
 
-    # obstacle 2
-    np.array([0.36, -0.026, 0.37]),
-    np.array([0.36, -0.026, 0.37]),
+    # # obstacle 2
+    # np.array([0.36, -0.026, 0.37]),
+    # np.array([0.36, -0.026, 0.37]),
 
 ]
 

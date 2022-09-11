@@ -44,24 +44,33 @@ def parse_arguments():
                         type=str, help="trained model name", default="policy_3D")
     parser.add_argument('--loaded_epoch', action='store',
                         type=int, default=100)
+    parser.add_argument('--num_perturbs', action='store',
+                        type=int, required=True)
     parser.add_argument('--view_ros', action='store_true',
                         help="visualize 3D scene with ROS Rviz")
+    parser.add_argument('--max_adaptation_time_sec',
+                        action='store', type=float)
     parser.add_argument('--collected_folder', action='store', type=str)
     args = parser.parse_args()
 
     return args
 
 
-def run_adaptation(policy, collected_folder):
+def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adaptation_time_sec):
     files = os.listdir(collected_folder)
     exp_iter = None
+    all_perturb_pose_traj = []
     for f in files:
         matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
         if len(matches) > 0:
             exp_iter = int(matches[0])
 
-    perturb_pose_traj = np.load(os.path.join(
-        collected_folder, f"perturb_traj_iter_{exp_iter}_num_0.npy"))
+            if len(all_perturb_pose_traj) < num_perturbs:
+                perturb_pose_traj = np.load(os.path.join(
+                    collected_folder, f))
+                all_perturb_pose_traj.append(perturb_pose_traj)
+    print("USING {} perturb trajs".format(len(all_perturb_pose_traj)))
+
     start_pos_world = start_poses[exp_iter]
     start_ori_quat = start_ori_quats[exp_iter]
     start_pose_world = np.concatenate([start_pos_world, start_ori_quat])
@@ -91,27 +100,37 @@ def run_adaptation(policy, collected_folder):
     objects_rot_torch = torch.cat(
         [objects_tensor, object_rot_radii_torch], dim=-1).unsqueeze(0)
 
-    assert len(
-        perturb_pose_traj) > 1, "Need intervention traj of > 1 steps"
-    dist = np.linalg.norm(
-        perturb_pose_traj[-1][0:POS_DIM] - perturb_pose_traj[0][0:POS_DIM])
-    # 1 step for start, 1 step for goal at least
-    # T = max(2, int(np.ceil(dist / dstep)))
-    T = 5
-    perturb_pos_traj_world_interp = np.linspace(
-        start=perturb_pose_traj[0][0:POS_DIM], stop=perturb_pose_traj[-1][0:POS_DIM], num=T)
-    final_perturb_ori = perturb_pose_traj[-1][POS_DIM:]
+    # include initial data processing in adaptation time
+    start_time = time.time()
+    all_processed_samples = []
+    for perturb_pose_traj in all_perturb_pose_traj:
+        assert len(
+            perturb_pose_traj) > 1, "Need intervention traj of > 1 steps"
+        T = 5
+        perturb_pos_traj_world_interp = np.linspace(
+            start=perturb_pose_traj[0][0:POS_DIM], stop=perturb_pose_traj[-1][0:POS_DIM], num=T)
+        final_perturb_ori = perturb_pose_traj[-1][POS_DIM:]
 
-    perturb_ori_traj = np.copy(final_perturb_ori)[
-        np.newaxis, :].repeat(T, axis=0)
-    perturb_pos_traj_net = perturb_pos_traj_world_interp * World2Net
-    perturb_pose_traj_net = np.hstack(
-        [np.vstack(perturb_pos_traj_net), perturb_ori_traj])
-    sample = (perturb_pose_traj_net, start_pose_net, goal_pose_net, goal_rot_radius,
-              object_poses_net[np.newaxis].repeat(T, axis=0),
-              object_radii[np.newaxis].repeat(T, axis=0),
-              object_idxs)
-    processed_sample = process_single_full_traj(sample)
+        perturb_ori_traj = np.copy(final_perturb_ori)[
+            np.newaxis, :].repeat(T, axis=0)
+        perturb_pos_traj_net = perturb_pos_traj_world_interp * World2Net
+        perturb_pose_traj_net = np.hstack(
+            [np.vstack(perturb_pos_traj_net), perturb_ori_traj])
+        sample = (perturb_pose_traj_net, start_pose_net, goal_pose_net, goal_rot_radius,
+                  object_poses_net[np.newaxis].repeat(T, axis=0),
+                  object_radii[np.newaxis].repeat(T, axis=0),
+                  object_idxs)
+        processed_sample = process_single_full_traj(sample)
+        all_processed_samples.append(processed_sample)
+
+    if max_adaptation_time_sec is not None:
+        max_adaptation_time_sec -= (time.time() - start_time)
+    else:
+        max_adaptation_time_sec = 1e10  # will still stop after max iters
+
+    # allocate 1/2 time for pos adapt and rot adapt
+    pos_adapt_time = max_adaptation_time_sec / 2
+    rot_adapt_time = max_adaptation_time_sec / 2
 
     # Update position
     print("Position:")
@@ -121,20 +140,23 @@ def run_adaptation(policy, collected_folder):
         print(
             "No major position perturbation, skipping position adaptation...")
     else:
-        best_pos_feats, _, _ = random_seed_adaptation(policy, processed_sample, train_pos=True, train_rot=False,
+        best_pos_feats, _, _ = random_seed_adaptation(policy, all_processed_samples, train_pos=True, train_rot=False,
                                                       is_3D=True, num_objects=num_objects, loss_prop_tol=0.8,
                                                       pos_feat_max=pos_feat_max, pos_feat_min=pos_feat_min,
                                                       rot_feat_max=rot_feat_max, rot_feat_min=rot_feat_min,
-                                                      pos_requires_grad=pos_requires_grad)
+                                                      pos_requires_grad=pos_requires_grad,
+                                                      clip_params=clip_params,
+                                                      allowed_time=pos_adapt_time)
 
     # Update rotation
     print("Rotation:")
     _, best_rot_feats, best_rot_offsets = (
-        random_seed_adaptation(policy, processed_sample, train_pos=False, train_rot=True,
+        random_seed_adaptation(policy, all_processed_samples, train_pos=False, train_rot=True,
                                is_3D=True, num_objects=num_objects, loss_prop_tol=0.2,
                                pos_feat_max=pos_feat_max, pos_feat_min=pos_feat_min,
                                rot_feat_max=rot_feat_max, rot_feat_min=rot_feat_min,
-                               rot_requires_grad=rot_requires_grad))
+                               rot_requires_grad=rot_requires_grad,
+                               allowed_time=rot_adapt_time))
 
     policy.update_obj_feats(best_pos_feats, best_rot_feats, best_rot_offsets)
 
@@ -145,7 +167,7 @@ if __name__ == "__main__":
     argparse_dict = vars(args)
 
     # define save path
-    save_folder = f"exp1/opa_saved_trials_inspection/eval"
+    save_folder = f"exp1/opa_saved_trials_inspection/eval_perturbs_{args.num_perturbs}_time_{args.max_adaptation_time_sec}"
     os.makedirs(save_folder, exist_ok=True)
 
     # Load trained model arguments
@@ -218,7 +240,10 @@ if __name__ == "__main__":
     )
 
     assert args.collected_folder is not None
-    run_adaptation(policy, collected_folder=args.collected_folder)
+    CLIP_PARAMS = False
+    run_adaptation(policy, collected_folder=args.collected_folder,
+                   clip_params=CLIP_PARAMS, num_perturbs=args.num_perturbs,
+                   max_adaptation_time_sec=args.max_adaptation_time_sec)
 
     it = 0
     pose_error_tol = 0.1
@@ -293,7 +318,8 @@ if __name__ == "__main__":
                     del_pose_running_avg.update(del_pose)
 
                 ee_pose_traj.append(cur_pose_world.copy())
-                print("dist_to_goal: ", pose_error)
+                if step % 5 == 0:
+                    print("dist_to_goal: ", pose_error)
 
                 with torch.no_grad():
                     # Define "object" inputs into policy
@@ -352,7 +378,6 @@ if __name__ == "__main__":
                                             R.from_quat(interp_rot).as_euler(
                                                 "XYZ") + rot_noise
                                             ).as_quat()
-                print(pos_noise)
                 it += 1
                 prev_pose_world = np.copy(cur_pose_world)
                 rospy.sleep(0.3)

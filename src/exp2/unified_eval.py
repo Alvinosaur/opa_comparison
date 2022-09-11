@@ -84,6 +84,56 @@ def parse_arguments():
     return args
 
 
+def run_adaptation(rm, collected_folder, num_perturbs, max_adaptation_time_sec):
+    files = os.listdir(collected_folder)
+    exp_iter = None
+    all_perturb_pose_traj = []
+    for f in files:
+        matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
+        if len(matches) > 0:
+            exp_iter = int(matches[0])
+
+            if len(all_perturb_pose_traj) < num_perturbs:
+                perturb_pose_traj = np.load(os.path.join(
+                    collected_folder, f))
+                all_perturb_pose_traj.append(perturb_pose_traj)
+
+    # Set obstacle pose
+    obstacle_pos = obstacle_poses[exp_iter]
+    obstacle_ori_quat = obstacle_ori_quats[exp_iter]
+    obstacle_ori_euler = R.from_quat(obstacle_ori_quat).as_euler("XYZ")
+    obstacle_pose_euler = np.concatenate(
+        [obstacle_pos, obstacle_ori_euler])
+
+    start_time = time.time()
+
+    # include initial data processing in adaptation time
+    if max_adaptation_time_sec is not None:
+        max_adaptation_time_sec -= (time.time() - start_time)
+    else:
+        max_adaptation_time_sec = 1e10  # will still stop after max iters
+
+    all_processed_perturb_pose_traj = []
+    num_wpts = 40
+    for perturb_pose_traj_quat in all_perturb_pose_traj:
+        perturb_pose_traj_euler = np.hstack([
+            perturb_pose_traj_quat[:, 0:3],
+            R.from_quat(perturb_pose_traj_quat[:, 3:]).as_euler("XYZ")
+        ])
+
+        perturb_pose_traj_euler = Trajectory(
+            waypts=perturb_pose_traj_euler,
+            waypts_time=np.linspace(0, num_wpts, len(perturb_pose_traj_euler))).downsample(num_waypts=num_wpts).waypts
+
+        all_processed_perturb_pose_traj.append(perturb_pose_traj_euler)
+
+    # Perform adaptation
+    context = obstacle_pose_euler[np.newaxis, :].repeat(
+        num_wpts, axis=0)
+    rm.train_rewards(all_processed_perturb_pose_traj,
+                     context=context, max_time=max_adaptation_time_sec)
+
+
 if __name__ == "__main__":
     ########################################################
     args = parse_arguments()
@@ -135,7 +185,6 @@ if __name__ == "__main__":
         obstacle_ori_euler = R.from_quat(obstacle_ori_quat).as_euler("XYZ")
         obstacle_pose_euler = np.concatenate(
             [obstacle_pos, obstacle_ori_euler])
-
 
         trajopt = TrajOptExp(home=start_pose,
                              goal=goal_pose,
