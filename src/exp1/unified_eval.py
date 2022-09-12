@@ -90,7 +90,8 @@ def parse_arguments():
     return args
 
 
-def run_adaptation(rm, collected_folder, num_perturbs, max_adaptation_time_sec):
+def run_adaptation(rm, collected_folder, num_perturbs, max_adaptation_time_sec,
+                    save_folder):
     files = os.listdir(collected_folder)
     exp_iter = None
     all_perturb_pose_traj = []
@@ -157,6 +158,9 @@ def run_adaptation(rm, collected_folder, num_perturbs, max_adaptation_time_sec):
     rm.train_rewards(deformed=deformed, demos=all_processed_perturb_pose_traj,
                      context=context, max_time=max_adaptation_time_sec)
 
+    # save
+    rm1.save(save_folder, "unified_model")
+
 
 if __name__ == "__main__":
     ########################################################
@@ -181,7 +185,7 @@ if __name__ == "__main__":
 
     # rm1.load(folder=load_folder, name="exp_0_adapt_iter_0")
     run_adaptation(rm1, collected_folder=load_folder, num_perturbs=args.num_perturbs,
-                   max_adaptation_time_sec=args.max_adaptation_time_sec)
+                   max_adaptation_time_sec=args.max_adaptation_time_sec, save_folder=save_folder)
 
     it = 0
     pose_error_tol = 0.1
@@ -216,19 +220,41 @@ if __name__ == "__main__":
         inspection_pose_euler = np.concatenate(
             [inspection_pos, inspection_ori_euler])
 
-        trajopt = TrajOptExp(home=start_pose,
-                             goal=goal_pose,
-                             human_pose_euler=inspection_pose_euler,
-                             context_dim=context_dim,
-                             use_state_features=args.use_state_features,
-                             waypoints=TRAJ_LEN)
-        traj = Trajectory(
-            waypts=trajopt.optimize(
-                context=inspection_pose_euler, reward_model=rm1),
-            waypts_time=waypts_time)
-        np.save(
-                f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{0}.npy", traj.waypts)
-        continue
+        for rand_trial in range(10):
+            # add small random noise to start/goal/objects
+            def rand_pos_noise():
+                return np.random.normal(loc=0, scale=0.05, size=3)
+            def rand_rot_euler_noise():
+                return np.random.normal(loc=0, scale=5 * np.pi / 180, size=3)
+            start_pose_noisy = np.concatenate([
+                start_pose[0:3] + rand_pos_noise(),
+                start_pose[3:] + rand_rot_euler_noise()
+            ])
+            goal_pose_noisy = np.concatenate([
+                goal_pose[0:3] + rand_pos_noise(),
+                goal_pose[3:] + rand_rot_euler_noise()
+            ])
+            inspection_pose_noisy = np.concatenate([
+                inspection_pose_euler[0:3] + rand_pos_noise(),
+                inspection_pose_euler[3:] + rand_rot_euler_noise()
+            ])
+            
+            trajopt = TrajOptExp(home=start_pose_noisy,
+                                goal=goal_pose_noisy,
+                                human_pose_euler=inspection_pose_noisy,
+                                context_dim=context_dim,
+                                use_state_features=args.use_state_features,
+                                waypoints=TRAJ_LEN)
+            traj = Trajectory(
+                waypts=trajopt.optimize(
+                    context=inspection_pose_euler, reward_model=rm1),
+                waypts_time=waypts_time)
+
+            np.savez(f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{0}.npz", traj=traj.waypts, start_pose=start_pose_noisy, goal_pose=goal_pose_noisy, inspection_pose=inspection_pose_noisy)
+
+        exit()
+
+
         local_target_pos = traj.waypts[0, 0:3]
         local_target_ori_quat = R.from_euler(
             "XYZ", traj.waypts[0, 3:]).as_quat()
