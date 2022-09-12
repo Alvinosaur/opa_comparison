@@ -40,4 +40,4 @@ class DNN(nn.Module):
         return x
 
     def reward(self, x):
-        return self(x).sum().item()
+        return self(x.to("cuda")).sum().item()

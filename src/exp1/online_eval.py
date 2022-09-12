@@ -77,7 +77,6 @@ class PredefinedReward(object):
         self.orientations = []  # quaternions
         self.pos_weights = np.array([])  # to be optimized
         self.ori_weights = np.array([])  # to be optimized
-        pass
 
     def dist(self, traj, pos):
         return np.linalg.norm(traj[:, 0:3] - pos, axis=-1).sum()
@@ -108,7 +107,8 @@ def OracleReward(PredefinedReward):
     def __init__(self, human_pose):
         self.positions = [human_pose[0:3]]
         self.orientations = [human_pose[3:]]
-        self.weights = np.ones(1)
+        self.pos_weights = np.ones(1)
+        self.ori_weights = np.ones(1)
 
 def MissingReward(PredefinedReward):
     def __init__(self):
@@ -127,8 +127,8 @@ def MissingReward(PredefinedReward):
                     self.orientations.append(
                         R.from_euler("XYZ", [rx,ry,rz], degrees=True).as_quat()
                     )
-
-        self.weights = np.ones(len(self.positions))
+        self.pos_weights = np.ones(len(self.positions))
+        self.ori_weights = np.ones(len(self.orientations))
 
 
 def parse_arguments():
@@ -151,7 +151,7 @@ def parse_arguments():
     return args
 
 
-def run_adaptation(collected_folder, num_perturbs, max_adaptation_time_sec):
+def run_adaptation(rm, collected_folder, num_perturbs, max_adaptation_time_sec):
     files = os.listdir(collected_folder)
     exp_iter = None
     all_perturb_pose_traj = []
@@ -188,6 +188,7 @@ def run_adaptation(collected_folder, num_perturbs, max_adaptation_time_sec):
 
     # Data processing
     all_processed_perturb_pose_traj = []
+    all_orig_predicted_pose_traj = []
     num_wpts = 40
     for perturb_pose_traj_euler in all_perturb_pose_traj:
 
@@ -202,9 +203,10 @@ def run_adaptation(collected_folder, num_perturbs, max_adaptation_time_sec):
         # Generate the original trajectories starting from the perturbation pose
         # that will be used to compare with the perturbation trajectories
         initial_pose = perturb_pose_traj_euler[0]
-        traj = Trajectory(waypts=trajopt.optimize(
+        orig_traj = Trajectory(waypts=trajopt.optimize(
                 context=inspection_pose_euler, reward_model=rm1),
-            waypts_time=waypts_time)
+            waypts_time=waypts_time).waypts
+        all_orig_predicted_pose_traj.append(traj)
 
     num_deforms = 1000
     deformed = []
@@ -232,6 +234,10 @@ def run_adaptation(collected_folder, num_perturbs, max_adaptation_time_sec):
     rm.train_rewards(deformed=deformed, demo_idxs=demo_idxs, demos=all_processed_perturb_pose_traj,
                      context=context, max_time=max_adaptation_time_sec)
 
+
+
+    
+
     # traj_deform = pertturb_pose_traj
     # new_features = self.environment.featurize(traj_deform.waypts)
     # old_features = self.environment.featurize(traj.waypts)
@@ -251,11 +257,6 @@ def run_adaptation(collected_folder, num_perturbs, max_adaptation_time_sec):
     # else:
     #     raise Exception('Learning method {} not implemented.'.format(self.feat_method))
 
-    print "Here is the update:", update
-    print "Here are the old weights:", self.environment.weights
-    print "Here are the new weights:", curr_weight
-    self.environment.weights = np.maximum(curr_weight, np.zeros(curr_weight.shape))
-
 if __name__ == "__main__":
     ########################################################
     args = parse_arguments()
@@ -274,8 +275,11 @@ if __name__ == "__main__":
     # context: human pose
     context_dim = 1 + 3 + 3 if args.use_state_features else 3 + 3
     input_dim = state_dim + context_dim  # robot pose, human pose
-    rm1 = TrainReward(model_dim=(input_dim, 128),
-                      epoch=2000, traj_len=TRAJ_LEN, device=DEVICE)
+
+    if args.is_expert:
+        rm = OracleReward(inspection_pose_euler)
+    else:
+        rm = MissingReward()
 
     # rm1.load(folder=load_folder, name="exp_0_adapt_iter_0")
     run_adaptation(rm1, collected_folder=load_folder, num_perturbs=args.num_perturbs,

@@ -9,6 +9,7 @@ import os
 from scipy.spatial.transform import Rotation as R
 import json
 import re
+from tqdm import tqdm
 
 import torch
 import sys
@@ -33,10 +34,11 @@ DEBUG = True
 dstep = 0.05
 ros_delay = 0.1
 
-DEVICE = "cpu"
+DEVICE = "cuda:0"
 print("DEVICE: %s" % DEVICE)
 
 # Hyperparameters
+T = 3.0
 TRAJ_LEN = 30  # fixed number of wayponts for trajopt
 waypts_time = np.linspace(0, T, TRAJ_LEN)
 adapt_num_epochs = 5
@@ -76,9 +78,7 @@ def parse_arguments():
                         type=int, default=100)
     parser.add_argument('--view_ros', action='store_true',
                         help="visualize 3D scene with ROS Rviz")
-    parser.add_argument('--collected_folder', action='store', type=str)
-    parser.add_argument('--use_state_features', action='store_true',
-                        help="context are the same state features that OPA uses, not raw object state")
+    parser.add_argument('--exp_folder', action='store', type=str)
     args = parser.parse_args()
 
     return args
@@ -88,20 +88,18 @@ if __name__ == "__main__":
     ########################################################
     args = parse_arguments()
     argparse_dict = vars(args)
-
-    # define save path
-    save_folder = f"exp2/unified_saved_trials_inspection2/eval"
+    ROOT_LOAD_FOLDER = "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection/"
+    ROOT_SAVE_FOLDER = "ferl_saved_trials_inspection_saved_eval"
+    save_folder = os.path.join(ROOT_SAVE_FOLDER, args.exp_folder)
     os.makedirs(save_folder, exist_ok=True)
-    load_folder = f"exp2/unified_saved_trials_inspection2/perturb_collection"
 
     # Define reward model
     state_dim = 3 + 3  # (pos, rot euler)
     # context: human pose
-    context_dim = 1 + 3 + 3 if args.use_state_features else 3 + 3
+    context_dim = 3 + 3
     input_dim = state_dim + context_dim  # robot pose, human pose
     ferl_dnn = DNN(nb_layers=3, nb_units=128, input_dim=12)
-    ferl_dnn.load_state_dict(torch.load(
-        "/home/ruic/Downloads/bo_ws/kde/vol/storage/catkin_ws/src/FERL/src/exp1/eval/model_0.pth"))
+    ferl_dnn.load_state_dict(torch.load(os.path.join(ROOT_LOAD_FOLDER, args.exp_folder, "model_0.pth")))
     ferl_dnn.to(DEVICE)
 
     it = 0
@@ -111,6 +109,7 @@ if __name__ == "__main__":
     num_exps = len(start_poses)
     # num_exps = 3
     num_rand_trials = 10
+    pbar = tqdm(total=num_exps * num_rand_trials)
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
@@ -161,65 +160,13 @@ if __name__ == "__main__":
                                 goal=goal_pose_noisy,
                                 human_pose_euler=inspection_pose_noisy,
                                 context_dim=context_dim,
-                                use_state_features=args.use_state_features,
+                                use_state_features=False,
                                 waypoints=TRAJ_LEN)
             traj = Trajectory(
                 waypts=trajopt.optimize(
                     context=inspection_pose_noisy, reward_model=ferl_dnn),
                 waypts_time=waypts_time)
 
-            np.savez(f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{0}.npz", traj=traj.waypts, start_pose=start_pose_noisy, goal_pose=goal_pose_noisy, inspection_pose=inspection_pose_noisy)
+            np.savez(os.path.join(save_folder, f"ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npz"), traj=traj.waypts, start_pose=start_pose_noisy, goal_pose=goal_pose_noisy, inspection_pose=inspection_pose_noisy)
 
             pbar.update(1)
-
-
-
-        local_target_pos = traj.waypts[0, 0:3]
-        local_target_ori_quat = R.from_euler(
-            "XYZ", traj.waypts[0, 3:]).as_quat()
-
-        # initialize target pose variables
-        cur_pos = np.copy(start_pose[0:3])
-        cur_ori_euler = np.copy(start_pose[3:])
-        cur_ori_quat = R.from_euler("XYZ", cur_ori_euler).as_quat()
-
-        intervene_count = 0
-        pose_error = 1e10
-        del_pose = 1e10
-        del_pose_running_avg = RunningAverage(length=5, init_vals=1e10)
-
-        ee_pose_traj = []
-        prev_pose_quat = None
-        step = 0
-        max_steps = 100
-        dt = 0.3
-        while (pose_error > pose_error_tol and
-                (pose_error > max_pose_error_tol) and step < max_steps):
-            step += 1
-            # calculate next action to take based on planned traj
-            cur_pose = np.concatenate([cur_pos, cur_ori_euler])
-            cur_pose_quat = np.concatenate([cur_pos, cur_ori_quat])
-            pose_error = calc_pose_error(
-                goal_pose_quat, cur_pose_quat, rot_scale=0)
-
-            ee_pose_traj.append(cur_pose_quat.copy())
-
-            local_target_pose = traj.interpolate(
-                t=step * dt).flatten()
-            local_target_pos = local_target_pose[0:3]
-            local_target_ori_quat = R.from_euler(
-                "XYZ", local_target_pose[3:]).as_quat()
-
-            cur_pos = local_target_pos
-            cur_ori_quat = local_target_ori_quat
-            cur_ori_euler = local_target_pose[3:]
-
-            print("dist_to_goal: ", pose_error)
-            prev_pose_quat = np.copy(cur_pose_quat)
-
-        # Save robot traj and intervene traj
-        np.save(f"{save_folder}/ee_pose_traj_iter_{exp_iter}.npy", ee_pose_traj)
-
-        print(
-            f"Finished! Error {pose_error} vs tol {pose_error_tol}, \nderror {del_pose_running_avg.avg} vs tol {del_pose_tol}")
-        print("Opening gripper to release item")

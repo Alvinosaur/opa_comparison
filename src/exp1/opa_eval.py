@@ -286,6 +286,7 @@ if __name__ == "__main__":
             inspection_ori_quat = R.from_euler("XYZ",
                     R.from_quat(inspection_ori_quats[exp_iter]).as_euler("XYZ") + rand_rot_euler_noise()
             ).as_quat()
+            inspection_pose_world = np.concatenate([inspection_pos_world, inspection_ori_quat])
             inspection_pose_net = np.concatenate(
                 [World2Net * inspection_pos_world, inspection_ori_quat], axis=-1)[np.newaxis]
             inspection_pose_tensor = torch.from_numpy(pose_to_model_input(
@@ -394,8 +395,7 @@ if __name__ == "__main__":
 
             # Save robot traj and intervene traj
             print("Done!")
-            np.save(
-                f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npy", ee_pose_traj)
+            np.savez(f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npz", traj=ee_pose_traj, start_pose=start_pose_world, goal_pose=goal_pose_world, inspection_pose=inspection_pose_world)
 
 
 """

@@ -183,9 +183,9 @@ if __name__ == "__main__":
     rm1 = TrainReward(model_dim=(input_dim, 128),
                       epoch=2000, traj_len=TRAJ_LEN, device=DEVICE)
 
-    # rm1.load(folder=save_folder, name="unified_model")
-    run_adaptation(rm1, collected_folder=load_folder, num_perturbs=args.num_perturbs,
-                   max_adaptation_time_sec=args.max_adaptation_time_sec, save_folder=save_folder)
+    rm1.load(folder=save_folder, name="unified_model")
+    # run_adaptation(rm1, collected_folder=load_folder, num_perturbs=args.num_perturbs,
+    #                max_adaptation_time_sec=args.max_adaptation_time_sec, save_folder=save_folder)
     # exit()
 
     it = 0
@@ -223,7 +223,7 @@ if __name__ == "__main__":
         inspection_pose_euler = np.concatenate(
             [inspection_pos, inspection_ori_euler])
 
-        for rand_trial in range(1):
+        for rand_trial in range(10):
             # add small random noise to start/goal/objects
             def rand_pos_noise():
                 return np.random.normal(loc=0, scale=0.05, size=3)
