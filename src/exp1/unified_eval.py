@@ -38,8 +38,8 @@ DEVICE = "cuda:0"
 print("DEVICE: %s" % DEVICE)
 
 # Hyperparameters
-T = 5.0
-TRAJ_LEN = 10  # fixed number of wayponts for trajopt
+T = 3.0
+TRAJ_LEN = 20  # fixed number of wayponts for trajopt
 waypts_time = np.linspace(0, T, TRAJ_LEN)
 adapt_num_epochs = 5
 
