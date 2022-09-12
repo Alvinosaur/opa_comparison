@@ -90,9 +90,9 @@ if __name__ == "__main__":
     argparse_dict = vars(args)
 
     # define save path
-    save_folder = f"exp2/unified_saved_trials_obstacle2/eval"
+    save_folder = f"exp2/unified_saved_trials_inspection2/eval"
     os.makedirs(save_folder, exist_ok=True)
-    load_folder = f"exp2/unified_saved_trials_obstacle2/perturb_collection"
+    load_folder = f"exp2/unified_saved_trials_inspection2/perturb_collection"
 
     # Define reward model
     state_dim = 3 + 3  # (pos, rot euler)
@@ -110,6 +110,7 @@ if __name__ == "__main__":
     del_pose_tol = 0.005  # over del_pose_interval iterations
     num_exps = len(start_poses)
     # num_exps = 3
+    num_rand_trials = 10
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
@@ -130,23 +131,49 @@ if __name__ == "__main__":
         goal_pose = np.concatenate([goal_pos, goal_ori_euler])
         goal_pose_quat = np.concatenate([goal_pos, goal_ori_quat])
 
-        # Set obstacle pose
-        obstacle_pos = obstacle_poses[exp_iter]
-        obstacle_ori_quat = obstacle_ori_quats[exp_iter]
-        obstacle_ori_euler = R.from_quat(obstacle_ori_quat).as_euler("XYZ")
-        obstacle_pose_euler = np.concatenate(
-            [obstacle_pos, obstacle_ori_euler])
+        # Set inspection pose
+        inspection_pos = inspection_poses[exp_iter]
+        inspection_ori_quat = inspection_ori_quats[exp_iter]
+        inspection_ori_euler = R.from_quat(inspection_ori_quat).as_euler("XYZ")
+        inspection_pose_euler = np.concatenate(
+            [inspection_pos, inspection_ori_euler])
 
-        trajopt = TrajOptExp(home=start_pose,
-                             goal=goal_pose,
-                             human_pose_euler=obstacle_pose_euler,
-                             context_dim=context_dim,
-                             use_state_features=args.use_state_features,
-                             waypoints=TRAJ_LEN)
-        traj = Trajectory(
-            waypts=trajopt.optimize(
-                context=obstacle_pose_euler, reward_model=ferl_dnn),
-            waypts_time=waypts_time)
+        for rand_trial in range(num_rand_trials):
+            # add small random noise to start/goal/objects
+            def rand_pos_noise():
+                return np.random.normal(loc=0, scale=0.05, size=3)
+            def rand_rot_euler_noise():
+                return np.random.normal(loc=0, scale=5 * np.pi / 180, size=3)
+            start_pose_noisy = np.concatenate([
+                start_pose[0:3] + rand_pos_noise(),
+                start_pose[3:] + rand_rot_euler_noise()
+            ])
+            goal_pose_noisy = np.concatenate([
+                goal_pose[0:3] + rand_pos_noise(),
+                goal_pose[3:] + rand_rot_euler_noise()
+            ])
+            inspection_pose_noisy = np.concatenate([
+                inspection_pose_euler[0:3] + rand_pos_noise(),
+                inspection_pose_euler[3:] + rand_rot_euler_noise()
+            ])
+            
+            trajopt = TrajOptExp(home=start_pose_noisy,
+                                goal=goal_pose_noisy,
+                                human_pose_euler=inspection_pose_noisy,
+                                context_dim=context_dim,
+                                use_state_features=args.use_state_features,
+                                waypoints=TRAJ_LEN)
+            traj = Trajectory(
+                waypts=trajopt.optimize(
+                    context=inspection_pose_noisy, reward_model=ferl_dnn),
+                waypts_time=waypts_time)
+
+            np.savez(f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{0}.npz", traj=traj.waypts, start_pose=start_pose_noisy, goal_pose=goal_pose_noisy, inspection_pose=inspection_pose_noisy)
+
+            pbar.update(1)
+
+
+
         local_target_pos = traj.waypts[0, 0:3]
         local_target_ori_quat = R.from_euler(
             "XYZ", traj.waypts[0, 3:]).as_quat()

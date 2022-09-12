@@ -8,6 +8,7 @@ import os
 import argparse
 import json
 import re
+import time
 
 import torch
 import sys
@@ -33,6 +34,10 @@ DEBUG = True
 dstep = 0.05
 ros_delay = 0.1
 
+seed = 123
+np.random.seed(seed)
+torch.manual_seed(seed)
+
 inspection_radii = np.array([6.0])[:, np.newaxis]  # defined on net scale
 inspection_rot_radii = np.array([6.0])[:, np.newaxis]
 goal_rot_radius = np.array([4.0])
@@ -56,19 +61,23 @@ def parse_arguments():
     return args
 
 
-def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adaptation_time_sec):
+def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adaptation_time_sec, save_folder):
     files = os.listdir(collected_folder)
     exp_iter = None
     all_perturb_pose_traj = []
     for f in files:
+        
         matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
         if len(matches) > 0:
             exp_iter = int(matches[0])
 
             if len(all_perturb_pose_traj) < num_perturbs:
+                print(f)
                 perturb_pose_traj = np.load(os.path.join(
                     collected_folder, f))
                 all_perturb_pose_traj.append(perturb_pose_traj)
+            else:
+                break
     print("USING {} perturb trajs".format(len(all_perturb_pose_traj)))
 
     start_pos_world = start_poses[exp_iter]
@@ -89,8 +98,6 @@ def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adap
 
     object_poses_net = inspection_pose_net
 
-    # include initial data processing in adaptation time
-    start_time = time.time()
     all_processed_samples = []
     for perturb_pose_traj in all_perturb_pose_traj:
         assert len(
@@ -112,6 +119,7 @@ def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adap
         processed_sample = process_single_full_traj(sample)
         all_processed_samples.append(processed_sample)
 
+    start_time = time.time()
     if max_adaptation_time_sec is not None:
         max_adaptation_time_sec -= (time.time() - start_time)
     else:
@@ -148,6 +156,7 @@ def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adap
                                allowed_time=rot_adapt_time))
 
     policy.update_obj_feats(best_pos_feats, best_rot_feats, best_rot_offsets)
+    policy.save(os.path.join(save_folder, "opa_model.pth"))
 
 
 if __name__ == "__main__":
@@ -232,7 +241,8 @@ if __name__ == "__main__":
     CLIP_PARAMS = False
     run_adaptation(policy, collected_folder=args.collected_folder,
                    clip_params=CLIP_PARAMS, num_perturbs=args.num_perturbs,
-                   max_adaptation_time_sec=args.max_adaptation_time_sec)
+                   max_adaptation_time_sec=args.max_adaptation_time_sec,
+                   save_folder=save_folder)
 
     it = 0
     pose_error_tol = 0.1
@@ -241,44 +251,52 @@ if __name__ == "__main__":
 
     num_exps = len(start_poses)
     # num_exps = 3
+
+    def rand_pos_noise():
+        return np.random.normal(loc=0, scale=0.05, size=3)
+    def rand_rot_euler_noise():
+        return np.random.normal(loc=0, scale=5 * np.pi / 180, size=3)
+
     for exp_iter in range(num_exps):
         print("NEW EXP ", exp_iter)
-        # set extra mass of object to pick up
-        # exp_iter = num_exps - 1
-        # exp_iter = min(exp_iter, num_exps - 1)
-        # extra_mass = extra_masses[exp_iter]
-
-        # Set start robot pose
-        start_pos_world = start_poses[exp_iter]
-        start_ori_quat = start_ori_quats[exp_iter]
-        start_pose_world = np.concatenate([start_pos_world, start_ori_quat])
-        start_pose_net = np.concatenate(
-            [start_pos_world * World2Net, start_ori_quat])
-        start_tensor = torch.from_numpy(
-            pose_to_model_input(start_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
-
-        # Set goal robot pose
-        goal_pos_world = goal_poses[exp_iter]
-        goal_ori_quat = goal_ori_quats[exp_iter]
-        goal_pose_net = np.concatenate(
-            [goal_pos_world * World2Net, goal_ori_quat])
-        goal_pose_world = np.concatenate([goal_pos_world, goal_ori_quat])
-
-        inspection_pos_world = inspection_poses[exp_iter]
-        inspection_ori_quat = inspection_ori_quats[exp_iter]
-        inspection_pose_net = np.concatenate(
-            [World2Net * inspection_pos_world, inspection_ori_quat], axis=-1)[np.newaxis]
-        inspection_pose_tensor = torch.from_numpy(pose_to_model_input(
-            inspection_pose_net)).to(torch.float32).to(DEVICE)
-
-        object_poses_net = inspection_pose_net
-        objects_tensor = inspection_pose_tensor
-        objects_torch = torch.cat(
-            [objects_tensor, object_radii_torch], dim=-1).unsqueeze(0)
-        objects_rot_torch = torch.cat(
-            [objects_tensor, object_rot_radii_torch], dim=-1).unsqueeze(0)
 
         for rand_trial in range(10):
+            # Set start robot pose
+            start_pos_world = start_poses[exp_iter] + rand_pos_noise()
+            start_ori_quat = R.from_euler("XYZ",
+                    R.from_quat(start_ori_quats[exp_iter]).as_euler("XYZ") + rand_rot_euler_noise()
+            ).as_quat()
+            start_pose_world = np.concatenate([start_pos_world, start_ori_quat])
+            start_pose_net = np.concatenate(
+                [start_pos_world * World2Net, start_ori_quat])
+            start_tensor = torch.from_numpy(
+                pose_to_model_input(start_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
+
+            # Set goal robot pose
+            goal_pos_world = goal_poses[exp_iter] + rand_pos_noise()
+            goal_ori_quat = R.from_euler("XYZ",
+                    R.from_quat(goal_ori_quats[exp_iter]).as_euler("XYZ") + rand_rot_euler_noise()
+            ).as_quat()
+            goal_pose_net = np.concatenate(
+                [goal_pos_world * World2Net, goal_ori_quat])
+            goal_pose_world = np.concatenate([goal_pos_world, goal_ori_quat])
+
+            # Set inspection pose
+            inspection_pos_world = inspection_poses[exp_iter] + rand_pos_noise()
+            inspection_ori_quat = R.from_euler("XYZ",
+                    R.from_quat(inspection_ori_quats[exp_iter]).as_euler("XYZ") + rand_rot_euler_noise()
+            ).as_quat()
+            inspection_pose_net = np.concatenate(
+                [World2Net * inspection_pos_world, inspection_ori_quat], axis=-1)[np.newaxis]
+            inspection_pose_tensor = torch.from_numpy(pose_to_model_input(
+                inspection_pose_net)).to(torch.float32).to(DEVICE)
+
+            object_poses_net = inspection_pose_net
+            objects_tensor = inspection_pose_tensor
+            objects_torch = torch.cat(
+                [objects_tensor, object_radii_torch], dim=-1).unsqueeze(0)
+            objects_rot_torch = torch.cat(
+                [objects_tensor, object_rot_radii_torch], dim=-1).unsqueeze(0)
 
             # initialize target pose variables
             cur_pos = np.copy(start_pose_world[0:3])
@@ -352,25 +370,27 @@ if __name__ == "__main__":
                     local_target_ori = decode_ori(
                         pred_ori.detach().cpu().numpy()).flatten()
 
-                override_pred_delay = False
+                # override_pred_delay = False
+                cur_pos = local_target_pos_world
+                cur_ori_quat = local_target_ori
 
                 # Apply low-pass filter to smooth out policy's sudden changes in orientation
-                interp_rot = interpolate_rotations(
-                    start_quat=cur_ori_quat, stop_quat=local_target_ori, alpha=0.7)
+                # interp_rot = interpolate_rotations(
+                #     start_quat=cur_ori_quat, stop_quat=local_target_ori, alpha=0.7)
 
-                pos_std = 0.01
-                rot_euler_std = 2 * np.pi / 180
-                pos_noise = np.random.normal(loc=0, scale=pos_std, size=3)
-                rot_noise = np.random.normal(
-                    loc=0, scale=rot_euler_std, size=3)
-                cur_pos = local_target_pos_world + pos_noise
-                cur_ori_quat = R.from_euler("XYZ",
-                                            R.from_quat(interp_rot).as_euler(
-                                                "XYZ") + rot_noise
-                                            ).as_quat()
-                it += 1
+                # pos_std = 0.01
+                # rot_euler_std = 2 * np.pi / 180
+                # pos_noise = np.random.normal(loc=0, scale=pos_std, size=3)
+                # rot_noise = np.random.normal(
+                #     loc=0, scale=rot_euler_std, size=3)
+                # cur_pos = local_target_pos_world + pos_noise
+                # cur_ori_quat = R.from_euler("XYZ",
+                #                             R.from_quat(interp_rot).as_euler(
+                #                                 "XYZ") + rot_noise
+                #                             ).as_quat()
+                # it += 1
                 prev_pose_world = np.copy(cur_pose_world)
-                rospy.sleep(0.3)
+                # rospy.sleep(0.3)
 
             # Save robot traj and intervene traj
             print("Done!")

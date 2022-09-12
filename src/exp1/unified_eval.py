@@ -183,9 +183,10 @@ if __name__ == "__main__":
     rm1 = TrainReward(model_dim=(input_dim, 128),
                       epoch=2000, traj_len=TRAJ_LEN, device=DEVICE)
 
-    # rm1.load(folder=load_folder, name="exp_0_adapt_iter_0")
+    # rm1.load(folder=save_folder, name="unified_model")
     run_adaptation(rm1, collected_folder=load_folder, num_perturbs=args.num_perturbs,
                    max_adaptation_time_sec=args.max_adaptation_time_sec, save_folder=save_folder)
+    # exit()
 
     it = 0
     pose_error_tol = 0.1
@@ -193,6 +194,8 @@ if __name__ == "__main__":
     del_pose_tol = 0.005  # over del_pose_interval iterations
     num_exps = len(start_poses)
     # num_exps = 3
+    num_rand_trials = 10
+    pbar = tqdm(total=num_exps*num_rand_trials)
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
@@ -220,7 +223,7 @@ if __name__ == "__main__":
         inspection_pose_euler = np.concatenate(
             [inspection_pos, inspection_ori_euler])
 
-        for rand_trial in range(10):
+        for rand_trial in range(1):
             # add small random noise to start/goal/objects
             def rand_pos_noise():
                 return np.random.normal(loc=0, scale=0.05, size=3)
@@ -247,75 +250,77 @@ if __name__ == "__main__":
                                 waypoints=TRAJ_LEN)
             traj = Trajectory(
                 waypts=trajopt.optimize(
-                    context=inspection_pose_euler, reward_model=rm1),
+                    context=inspection_pose_noisy, reward_model=rm1),
                 waypts_time=waypts_time)
 
-            np.savez(f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{0}.npz", traj=traj.waypts, start_pose=start_pose_noisy, goal_pose=goal_pose_noisy, inspection_pose=inspection_pose_noisy)
+            np.savez(f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npz", traj=traj.waypts, start_pose=start_pose_noisy, goal_pose=goal_pose_noisy, inspection_pose=inspection_pose_noisy)
 
-        exit()
+            pbar.update(1)
+
+    exit()
 
 
-        local_target_pos = traj.waypts[0, 0:3]
-        local_target_ori_quat = R.from_euler(
-            "XYZ", traj.waypts[0, 3:]).as_quat()
+        # local_target_pos = traj.waypts[0, 0:3]
+        # local_target_ori_quat = R.from_euler(
+        #     "XYZ", traj.waypts[0, 3:]).as_quat()
 
-        # traj = traj.waypts.copy()
-        # traj = np.hstack([
-        #     traj[:, 0:3],
-        #     R.from_euler("XYZ", traj[:, 3:]).as_quat()
-        # ])
-        # np.save(
-        #     f"{save_folder}/ee_pose_traj_iter_{0}_rand_trial_{0}.npy", traj)
-        # exit()
+        # # traj = traj.waypts.copy()
+        # # traj = np.hstack([
+        # #     traj[:, 0:3],
+        # #     R.from_euler("XYZ", traj[:, 3:]).as_quat()
+        # # ])
+        # # np.save(
+        # #     f"{save_folder}/ee_pose_traj_iter_{0}_rand_trial_{0}.npy", traj)
+        # # exit()
 
-        for rand_trial in range(10):
-            # initialize target pose variables
-            cur_pos = np.copy(start_pose[0:3])
-            cur_ori_euler = np.copy(start_pose[3:])
+        # for rand_trial in range(10):
+        #     # initialize target pose variables
+        #     cur_pos = np.copy(start_pose[0:3])
+        #     cur_ori_euler = np.copy(start_pose[3:])
 
-            intervene_count = 0
-            pose_error = 1e10
-            del_pose = 1e10
-            del_pose_running_avg = RunningAverage(length=5, init_vals=1e10)
+        #     intervene_count = 0
+        #     pose_error = 1e10
+        #     del_pose = 1e10
+        #     del_pose_running_avg = RunningAverage(length=5, init_vals=1e10)
 
-            ee_pose_traj = []
-            prev_pose_quat = None
-            step = 0
-            max_steps = 100
-            dt = 0.5
-            while (pose_error > pose_error_tol and
-                    (pose_error > max_pose_error_tol) and step < max_steps):
-                step += 1
-                # calculate next action to take based on planned traj
-                cur_pose = np.concatenate([cur_pos, cur_ori_euler])
-                cur_ori_quat = R.from_euler("XYZ", cur_ori_euler).as_quat()
-                cur_pose_quat = np.concatenate([cur_pos, cur_ori_quat])
-                pose_error = calc_pose_error(
-                    goal_pose_quat, cur_pose_quat, rot_scale=0)
+        #     ee_pose_traj = []
+        #     prev_pose_quat = None
+        #     step = 0
+        #     max_steps = 100
+        #     dt = 0.5
+        #     while (pose_error > pose_error_tol and
+        #             (pose_error > max_pose_error_tol) and step < max_steps):
+        #         step += 1
+        #         # calculate next action to take based on planned traj
+        #         cur_pose = np.concatenate([cur_pos, cur_ori_euler])
+        #         cur_ori_quat = R.from_euler("XYZ", cur_ori_euler).as_quat()
+        #         cur_pose_quat = np.concatenate([cur_pos, cur_ori_quat])
+        #         pose_error = calc_pose_error(
+        #             goal_pose_quat, cur_pose_quat, rot_scale=0)
 
-                ee_pose_traj.append(cur_pose_quat.copy())
+        #         ee_pose_traj.append(cur_pose_quat.copy())
 
-                local_target_pose = traj.interpolate(
-                    t=step * dt).flatten()
-                local_target_pos = local_target_pose[0:3]
-                local_target_ori_quat = R.from_euler(
-                    "XYZ", local_target_pose[3:]).as_quat()
+        #         local_target_pose = traj.interpolate(
+        #             t=step * dt).flatten()
+        #         local_target_pos = local_target_pose[0:3]
+        #         local_target_ori_quat = R.from_euler(
+        #             "XYZ", local_target_pose[3:]).as_quat()
 
-                # 0 mean pos_std noise
-                pos_std = 0.05
-                rot_euler_std = 5 * np.pi / 180
-                pos_noise = np.random.normal(loc=0, scale=pos_std, size=3)
-                rot_noise = np.random.normal(
-                    loc=0, scale=rot_euler_std, size=3)
+        #         # 0 mean pos_std noise
+        #         pos_std = 0.05
+        #         rot_euler_std = 5 * np.pi / 180
+        #         pos_noise = np.random.normal(loc=0, scale=pos_std, size=3)
+        #         rot_noise = np.random.normal(
+        #             loc=0, scale=rot_euler_std, size=3)
 
-                cur_pos = local_target_pos + pos_noise
-                cur_ori_euler = local_target_pose[3:] + rot_noise
+        #         cur_pos = local_target_pos + pos_noise
+        #         cur_ori_euler = local_target_pose[3:] + rot_noise
 
-                print("dist_to_goal: ", pose_error)
-                prev_pose_quat = np.copy(cur_pose_quat)
+        #         print("dist_to_goal: ", pose_error)
+        #         prev_pose_quat = np.copy(cur_pose_quat)
 
-            # Save robot traj and intervene traj
-            np.save(
-                f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npy", ee_pose_traj)
+        #     # Save robot traj and intervene traj
+        #     np.save(
+        #         f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npy", ee_pose_traj)
 
-            print("Finished!")
+        #     print("Finished!")
