@@ -21,15 +21,33 @@ def calc_regret(traj, human_pose, desired_rot_offset):
     # NOTE: right-multiply rot offset to get relative to human pose
     desired_rot = (R.from_quat(human_pose[3:]) *
                    R.from_quat(desired_rot_offset)).as_quat()
-    regret = np.min(np.linalg.norm(
+    pos_cost = np.min(np.linalg.norm(
         traj[:, 0:3] - human_pose[np.newaxis, 0:3], axis=-1))
 
     # (T x 4) * (4,) = (T,)
-    regret += np.min(
+    rot_cost = np.min(
         np.arccos(np.abs(traj[:, 3:] @ desired_rot))
     )
 
-    return regret
+    return pos_cost, rot_cost
+
+
+def pose_as_quat(pose):
+    if pose.shape[-1] == 7:
+        return pose
+    elif pose.shape[-1] == 6:
+        if len(pose.shape) > 1:
+            return np.hstack([
+                pose[:, 0:3],
+                R.from_euler("XYZ", pose[:, 3:]).as_quat()
+            ])
+        else:
+            return np.hstack([
+                pose[0:3],
+                R.from_euler("XYZ", pose[3:]).as_quat()
+            ])
+    else:
+        raise Exception("Unexpected pose shape")
 
 
 """
@@ -61,21 +79,30 @@ if __name__ == "__main__":
         R.from_quat(inspection_ori_quat_from_perturb).inv() *
         R.from_quat(perturb_traj[-1, 3:])).as_quat()
 
+    all_pos_costs = []
+    all_rot_costs = []
     total_cost = 0.0
     for exp_iter in range(num_exps):
-        inspection_pos_world = inspection_poses[exp_iter]
-        inspection_ori_quat = inspection_ori_quats[exp_iter]
-        inspection_pose_net = np.concatenate(
-            [inspection_pos_world, inspection_ori_quat], axis=-1)
+        pos_costs_iter = []
+        rot_costs_iter = []
+        for rand_trial in range(10):
+            ee_pose_traj_data = np.load(os.path.join(
+                args.trials_folder, f"ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npz"), allow_pickle=True)
+            ee_pose_traj = pose_as_quat(ee_pose_traj_data["traj"])
+            inspection_pose = pose_as_quat(ee_pose_traj_data["inspection_pose"])
 
-        ee_pose_traj = np.load(os.path.join(
-            args.trials_folder, f"ee_pose_traj_iter_{exp_iter}.npy"))
+            pos_cost, rot_cost = calc_regret(ee_pose_traj, human_pose=inspection_pose,
+                            desired_rot_offset=desired_rot_offset)
 
-        cost = calc_regret(ee_pose_traj, human_pose=inspection_pose_net,
-                           desired_rot_offset=desired_rot_offset)
+            # each row is all the data from one exp_iter
+            pos_costs_iter.append(pos_cost)
+            rot_costs_iter.append(rot_cost)
 
-        print(cost)
+        all_pos_costs.append(pos_costs_iter)
+        all_rot_costs.append(rot_costs_iter)
 
-        total_cost += cost
-
-    print("Total cost: ", total_cost)
+    all_pos_costs = np.array(all_pos_costs)
+    all_rot_costs = np.array(all_rot_costs)
+    np.savez(os.path.join(args.trials_folder, "metrics.npz"),
+            all_pos_costs=all_pos_costs,
+            all_rot_costs=all_rot_costs)
