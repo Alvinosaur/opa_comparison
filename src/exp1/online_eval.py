@@ -102,7 +102,7 @@ class PredefinedReward(object):
 
     def ori_dist(self, traj_euler, ori_quat):
         traj_quat = R.from_euler("XYZ", traj_euler[:, 3:]).as_quat()
-        return np.arccos(np.abs(traj_quat @ ori_quat)).sum()
+        return np.arccos(np.clip(np.abs(traj_quat @ ori_quat), 0, 1)).sum()
 
     def reward(self, x, ret_single_value=True):
         traj = x
@@ -115,13 +115,47 @@ class PredefinedReward(object):
         else:
             return -1 * np.concatenate([pos_dists, ori_dists])
 
-    def update_weights_one_step(self, orig, expert):
+    def generate_orig(self, expert_traj, goal_pose_euler):
+        # Set desired pose
+        if rm.is_expert:
+            rm.set_desired_pose(expert_traj[-1, 0:3], R.from_euler("XYZ", expert_traj[-1, 3:]).as_quat())
+
+        # Generate the original trajectories starting from the perturbation pose
+        # that will be used to compare with the perturbation trajectories
+        initial_pose = expert_traj[0]
+        trajopt = TrajOptExp(home=initial_pose,
+                             goal=goal_pose_euler,
+                             human_pose_euler=expert_traj[-1],
+                             context_dim=context_dim,
+                             use_state_features=False,
+                             waypoints=TRAJ_LEN, max_iter=20, eps=0.1)
+        
+        orig_traj = Trajectory(waypts=trajopt.optimize(
+                context=expert_traj[-1], reward_model=rm),
+            waypts_time=waypts_time).waypts
+
+        return orig_traj
+
+    def update_weights_one_step(self, expert, goal_pose_euler, method):
+        orig = self.generate_orig(expert, goal_pose_euler)
         orig_feats = self.reward(orig, ret_single_value=False)
         expert_feats = self.reward(expert, ret_single_value=False)
         update = expert_feats - orig_feats
-        self.pos_weights -= self.alpha * update[0:len(self.pos_weights)]
-        self.ori_weights -= self.alpha * update[len(self.pos_weights):]
-        print(self.pos_weights)
+        print(expert_feats)
+        print(orig_feats)
+        print(np.array2string(update, precision=2))
+        print()
+        if method ==  "max":
+            max_pos_idx = np.argmax(np.fabs(update[0:len(self.pos_weights)]))
+            max_ori_idx = np.argmax(np.fabs(update[len(self.ori_weights):]))
+            
+            self.pos_weights[max_pos_idx] += self.alpha * update[max_pos_idx]
+            self.ori_weights[max_ori_idx] += self.alpha * update[max_ori_idx]
+        else:
+            self.pos_weights -= self.alpha * update[0:len(self.pos_weights)]
+            self.ori_weights += self.alpha * update[len(self.pos_weights):]
+        # print(self.pos_weights)
+        # print(self.ori_weights)
 
 
 # class OracleReward(PredefinedReward):
@@ -133,6 +167,17 @@ class PredefinedReward(object):
 #         self.orientations = [desired_rot_quat]
 #         self.pos_weights = np.ones(1)
 #         self.ori_weights = np.ones(1)
+
+def rand_quat() -> np.ndarray:
+    """
+    Generate a random quaternion: http://planning.cs.uiuc.edu/node198.html
+    :return: quaternion np.ndarray(4,)
+    """
+    u, v, w = np.random.uniform(0, 1, 3)
+    return np.array([np.sqrt(1 - u) * np.sin(2 * np.pi * v),
+                     np.sqrt(1 - u) * np.cos(2 * np.pi * v),
+                     np.sqrt(u) * np.sin(2 * np.pi * w),
+                     np.sqrt(u) * np.cos(2 * np.pi * w)])
 
 class MissingReward(PredefinedReward):
     def __init__(self, is_expert):
@@ -148,12 +193,8 @@ class MissingReward(PredefinedReward):
         self.orig_pos_len = len(self.positions)
 
         # discrete sampling of some rotations
-        for rx in range(0, 360+1, 30):
-            for ry in range(0, 360+1, 30):
-                for rz in range(0, 360+1, 30):
-                    self.orientations.append(
-                        R.from_euler("XYZ", [rx,ry,rz], degrees=True).as_quat()
-                    )
+        for _ in range(5):
+            self.orientations.append(rand_quat())
         self.orig_ori_len = len(self.orientations)
         self.pos_weights = np.ones(len(self.positions))
         self.ori_weights = np.ones(len(self.orientations))
@@ -215,40 +256,22 @@ def run_adaptation(rm: MissingReward, save_folder, collected_folder, num_perturb
     num_wpts = 40
     start_time = time.time()
 
-    # for perturb_pose_traj_euler in all_perturb_pose_traj:
-        # waypts_time=np.linspace(0, num_wpts, len(perturb_pose_traj_euler))
-        # perturb_pose_traj_euler = Trajectory(
-        #         waypts=perturb_pose_traj_euler,
-        #         waypts_time=waypts_time
-        #     ).downsample(num_waypts=num_wpts).waypts
-        # all_expert_pose_traj.append(perturb_pose_traj_euler)
-
-        # # Set desired pose
-        # if rm.is_expert:
-        #     rm.set_desired_pose(inspection_pos, R.from_euler("XYZ", perturb_pose_traj_euler[-1, 3:]).as_quat())
-
-        # # Generate the original trajectories starting from the perturbation pose
-        # # that will be used to compare with the perturbation trajectories
-        # initial_pose = perturb_pose_traj_euler[0]
-        # trajopt = TrajOptExp(home=initial_pose,
-        #                      goal=goal_pose_euler,
-        #                      human_pose_euler=inspection_pose_euler,
-        #                      context_dim=context_dim,
-        #                      use_state_features=False,
-        #                      waypoints=TRAJ_LEN, max_iter=100, eps=0.1)
-        
-        # orig_traj = Trajectory(waypts=trajopt.optimize(
-        #         context=inspection_pose_euler, reward_model=rm),
-        #     waypts_time=waypts_time).waypts
-        # all_orig_predicted_pose_traj.append(orig_traj)
+    for perturb_pose_traj_euler in all_perturb_pose_traj:
+        waypts_time=np.linspace(0, num_wpts, len(perturb_pose_traj_euler))
+        perturb_pose_traj_euler = Trajectory(
+                waypts=perturb_pose_traj_euler,
+                waypts_time=waypts_time
+            ).downsample(num_waypts=num_wpts).waypts
+        all_expert_pose_traj.append(perturb_pose_traj_euler)
+    all_expert_pose_traj = np.array(all_expert_pose_traj)
 
     # This took 97 sec... not sure if should include 97/N or not
     # print("time spent: ", time.time() - start_time)
     # np.save("exp1/all_orig_predicted_pose_traj.npy", all_orig_predicted_pose_traj)
     # np.save("exp1/all_expert_pose_traj.npy", all_expert_pose_traj)
-    # exit()
-    all_orig_predicted_pose_traj = np.load("exp1/all_orig_predicted_pose_traj.npy")
-    all_expert_pose_traj = np.load("exp1/all_expert_pose_traj.npy")
+    # # exit()
+    # all_orig_predicted_pose_traj = np.load("exp1/online_saved_trials_inspection/all_orig_predicted_pose_traj.npy")
+    # all_expert_pose_traj = np.load("exp1/online_saved_trials_inspection/all_expert_pose_traj.npy")
 
     rm.set_desired_pose(inspection_pos, R.from_euler("XYZ", 
         all_expert_pose_traj[0, 0, 3:]).as_quat())
@@ -261,8 +284,9 @@ def run_adaptation(rm: MissingReward, save_folder, collected_folder, num_perturb
         if max_adaptation_time_sec is not None and time.time() - start_time > max_adaptation_time_sec:
             break
         rand_idx = np.random.randint(0, num_perturbs)
-        rm.update_weights_one_step(orig=all_orig_predicted_pose_traj[rand_idx],
-        expert=all_expert_pose_traj[rand_idx])
+        rm.update_weights_one_step(
+        expert=all_expert_pose_traj[rand_idx], method="max",
+        goal_pose_euler=goal_pose_euler)
         
     np.savez(os.path.join(save_folder, "online_weights.npz"),
         pos_weights=rm.pos_weights,

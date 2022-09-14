@@ -27,6 +27,12 @@ args = parse_arguments()
 
 all_data = []
 methods = ["opa", "unified", "ferl", "online"]
+folders = [
+    "opa_saved_trials_inspection/eval_perturbs_1_time_60.0",
+    "unified_saved_trials_inspection/eval_perturbs_10_time_100.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_saved_eval/eval_perturbs_10_time_300.0/",
+    "opa_saved_trials_inspection/eval_perturbs_1_time_60.0",
+]
 for method in methods:
     metrics_data = np.load(os.path.join(args.trials_folder, "metrics.npz"))
     all_pos_costs = metrics_data["all_pos_costs"]
