@@ -89,13 +89,16 @@ class TrajOptExp(TrajOptBase):
 
 
 class PredefinedReward(object):
-    def __init__(self):
+    def __init__(self, is_expert):
         # some poses to either avoid or attract to
         self.positions = []
         self.orientations = []  # quaternions
         self.pos_weights = np.array([])  # to be optimized
         self.ori_weights = np.array([])  # to be optimized
-        self.alpha = 0.1
+        self.alpha = 0.01
+        self.orig_pos_len = 0
+        self.orig_ori_len = 0
+        self.is_expert = is_expert
 
     def dist(self, traj_euler, pos):
         return np.linalg.norm(traj_euler[:, 0:3] - pos, axis=-1).sum()
@@ -110,15 +113,32 @@ class PredefinedReward(object):
         ori_dists = np.array([self.ori_dist(traj, ori) for ori in self.orientations])
 
         if ret_single_value:
-            return -1 * (self.pos_weights @ pos_dists + 
+            return (self.pos_weights @ pos_dists + 
                      self.ori_weights @ ori_dists)
         else:
-            return -1 * np.concatenate([pos_dists, ori_dists])
+            return np.concatenate([pos_dists, ori_dists])
+
+    def set_desired_pose(self, human_pos, desired_rot_quat):
+        if len(self.positions) == self.orig_pos_len:
+            self.positions.append(human_pos)
+        else:
+            self.positions[-1] = human_pos
+
+        if len(self.orientations) == self.orig_ori_len:
+            self.orientations.append(desired_rot_quat)
+        else:
+            self.orientations[-1] = desired_rot_quat
+
+        if len(self.pos_weights) < len(self.positions):
+            self.pos_weights = np.append(self.pos_weights, 1)
+        if len(self.ori_weights) < len(self.orientations):
+            self.ori_weights = np.append(self.ori_weights, 1)
+
 
     def generate_orig(self, expert_traj, goal_pose_euler):
         # Set desired pose
-        if rm.is_expert:
-            rm.set_desired_pose(expert_traj[-1, 0:3], R.from_euler("XYZ", expert_traj[-1, 3:]).as_quat())
+        if self.is_expert:
+            self.set_desired_pose(expert_traj[-1, 0:3], R.from_euler("XYZ", expert_traj[-1, 3:]).as_quat())
 
         # Generate the original trajectories starting from the perturbation pose
         # that will be used to compare with the perturbation trajectories
@@ -131,7 +151,7 @@ class PredefinedReward(object):
                              waypoints=TRAJ_LEN, max_iter=20, eps=0.1)
         
         orig_traj = Trajectory(waypts=trajopt.optimize(
-                context=expert_traj[-1], reward_model=rm),
+                context=expert_traj[-1], reward_model=self),
             waypts_time=waypts_time).waypts
 
         return orig_traj
@@ -141,21 +161,24 @@ class PredefinedReward(object):
         orig_feats = self.reward(orig, ret_single_value=False)
         expert_feats = self.reward(expert, ret_single_value=False)
         update = expert_feats - orig_feats
-        print(expert_feats)
-        print(orig_feats)
-        print(np.array2string(update, precision=2))
-        print()
+        # print(expert_feats)
+        # print(orig_feats)
+        # print(np.array2string(update, precision=2))
+        # print()
         if method ==  "max":
             max_pos_idx = np.argmax(np.fabs(update[0:len(self.pos_weights)]))
             max_ori_idx = np.argmax(np.fabs(update[len(self.ori_weights):]))
             
-            self.pos_weights[max_pos_idx] += self.alpha * update[max_pos_idx]
-            self.ori_weights[max_ori_idx] += self.alpha * update[max_ori_idx]
+            self.pos_weights[max_pos_idx] -= self.alpha * update[max_pos_idx]
+            self.ori_weights[max_ori_idx] -= self.alpha * update[max_ori_idx]
         else:
             self.pos_weights -= self.alpha * update[0:len(self.pos_weights)]
-            self.ori_weights += self.alpha * update[len(self.pos_weights):]
+            self.ori_weights -= self.alpha * update[len(self.pos_weights):]
         # print(self.pos_weights)
         # print(self.ori_weights)
+
+    # min_x [ w * dist(x, human) ]
+    # w = inf, 
 
 
 # class OracleReward(PredefinedReward):
@@ -181,8 +204,7 @@ def rand_quat() -> np.ndarray:
 
 class MissingReward(PredefinedReward):
     def __init__(self, is_expert):
-        super().__init__()
-        self.is_expert = is_expert
+        super().__init__(is_expert)
         # some random positions of random objects
         self.positions = [
             np.array([0.2, 0.35, -0.08]),
@@ -196,24 +218,9 @@ class MissingReward(PredefinedReward):
         for _ in range(5):
             self.orientations.append(rand_quat())
         self.orig_ori_len = len(self.orientations)
+
         self.pos_weights = np.ones(len(self.positions))
         self.ori_weights = np.ones(len(self.orientations))
-
-    def set_desired_pose(self, human_pos, desired_rot_quat):
-        if len(self.positions) == self.orig_pos_len:
-            self.positions.append(human_pos)
-        else:
-            self.positions[-1] = human_pos
-
-        if len(self.orientations) == self.orig_ori_len:
-            self.orientations.append(desired_rot_quat)
-        else:
-            self.orientations[-1] = desired_rot_quat
-
-        if len(self.pos_weights) < len(self.positions):
-            self.pos_weights = np.append(self.pos_weights, 1)
-        if len(self.ori_weights) < len(self.orientations):
-            self.ori_weights = np.append(self.ori_weights, 1)
 
 def run_adaptation(rm: MissingReward, save_folder, collected_folder, num_perturbs, max_adaptation_time_sec):
     files = os.listdir(collected_folder)
@@ -285,7 +292,7 @@ def run_adaptation(rm: MissingReward, save_folder, collected_folder, num_perturb
             break
         rand_idx = np.random.randint(0, num_perturbs)
         rm.update_weights_one_step(
-        expert=all_expert_pose_traj[rand_idx], method="max",
+        expert=all_expert_pose_traj[rand_idx], method="...",
         goal_pose_euler=goal_pose_euler)
         
     np.savez(os.path.join(save_folder, "online_weights.npz"),
@@ -321,9 +328,6 @@ if __name__ == "__main__":
     # rm1.load(folder=load_folder, name="exp_0_adapt_iter_0")
     run_adaptation(rm, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
                    max_adaptation_time_sec=args.max_adaptation_time_sec)
-    
-    import ipdb
-    ipdb.set_trace()
 
     it = 0
     pose_error_tol = 0.1
