@@ -113,10 +113,10 @@ class PredefinedReward(object):
         ori_dists = np.array([self.ori_dist(traj, ori) for ori in self.orientations])
 
         if ret_single_value:
-            return -1 * (self.pos_weights @ pos_dists + 
+            return (self.pos_weights @ pos_dists + 
                      self.ori_weights @ ori_dists)
         else:
-            return -1 * np.concatenate([pos_dists, ori_dists])
+            return np.concatenate([pos_dists, ori_dists])
 
     def set_desired_pose(self, human_pos, desired_rot_quat):
         if len(self.positions) == self.orig_pos_len:
