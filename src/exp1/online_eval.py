@@ -95,7 +95,7 @@ class PredefinedReward(object):
         self.orientations = []  # quaternions
         self.pos_weights = np.array([])  # to be optimized
         self.ori_weights = np.array([])  # to be optimized
-        self.alpha = 0.01
+        self.alpha = 0.001
         # some random positions of random objects
         self.positions = [
             np.array([0.2, 0.35, -0.08]),
@@ -104,9 +104,10 @@ class PredefinedReward(object):
             np.array([0.3, -0.1, 0.1]),
         ]
         self.orig_pos_len = len(self.positions)
+        self.iter = 0
 
         # discrete sampling of some rotations
-        for _ in range(10):
+        for _ in range(3):
             self.orientations.append(rand_quat())
         self.orig_ori_len = len(self.orientations)
 
@@ -120,15 +121,22 @@ class PredefinedReward(object):
     def ori_dist(self, traj_euler, ori_quat):
         traj_quat = R.from_euler("XYZ", traj_euler[:, 3:]).as_quat()
         return np.arccos(np.clip(np.abs(traj_quat @ ori_quat), 0, 1)).sum()
+        # ori_euler = R.from_quat(ori_quat).as_euler("XYZ")
+        # return np.linalg.norm(traj_euler[:, 3:] - ori_euler[np.newaxis, :], axis=-1).sum()
 
     def reward(self, x, ret_single_value=True):
         traj = x
         pos_dists = np.array([self.dist(traj, pos) for pos in self.positions])
         ori_dists = np.array([self.ori_dist(traj, ori) for ori in self.orientations])
 
+        rot_weight = 1.0
+        # self.iter += 1
+
         if ret_single_value:
+            # if self.iter % 50 == 0:
+            #     print(self.iter, self.pos_weights @ pos_dists, rot_weight * self.ori_weights @ ori_dists)
             res = -1 * (self.pos_weights @ pos_dists + 
-                    self.ori_weights @ ori_dists)
+                    rot_weight * self.ori_weights @ ori_dists)
             return res
         else:
             return +1 * np.concatenate([pos_dists, ori_dists])
@@ -163,7 +171,7 @@ class PredefinedReward(object):
                              human_pose_euler=expert_traj[-1],
                              context_dim=context_dim,
                              use_state_features=False,
-                             waypoints=TRAJ_LEN, max_iter=20, eps=0.1)
+                             waypoints=TRAJ_LEN, max_iter=100)
         
         orig_traj = Trajectory(waypts=trajopt.optimize(
                 context=expert_traj[-1], reward_model=self),
@@ -180,7 +188,7 @@ class PredefinedReward(object):
         # print(orig_feats)
         # print(np.array2string(update, precision=2))
         # print()
-        if method ==  "max":
+        if method == "max":
             max_pos_idx = np.argmax(np.fabs(update[0:len(self.pos_weights)]))
             max_ori_idx = np.argmax(np.fabs(update[len(self.ori_weights):]))
             
@@ -194,6 +202,7 @@ class PredefinedReward(object):
         # weights could be set to negative and optimized incorrectly
         # any non-important features should have 0 weight
         # and only important features have high positive weight
+        # print(self.ori_weights)
         self.pos_weights = np.clip(self.pos_weights, 0, np.Inf)
         self.ori_weights = np.clip(self.ori_weights, 0, np.Inf)
 
@@ -295,7 +304,8 @@ def run_adaptation(rm: PredefinedReward, save_folder, collected_folder, num_pert
     start_time = time.time()
     if max_adaptation_time_sec is None:
         max_adaptation_time_sec = 1e10  # will still stop after max iters
-    for _ in range(100000):
+    for update_step in range(100):
+        # print("UPDATE STEP: ", update_step)
         if max_adaptation_time_sec is not None and time.time() - start_time > max_adaptation_time_sec:
             break
         rand_idx = np.random.randint(0, num_perturbs)
