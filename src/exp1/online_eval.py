@@ -125,13 +125,13 @@ class PredefinedReward(object):
         traj = x
         pos_dists = np.array([self.dist(traj, pos) for pos in self.positions])
         ori_dists = np.array([self.ori_dist(traj, ori) for ori in self.orientations])
-        # print(pos_dists)
 
         if ret_single_value:
-            return (self.pos_weights @ pos_dists + 
-                     self.ori_weights @ ori_dists)
+            res = -1 * (self.pos_weights @ pos_dists + 
+                    self.ori_weights @ ori_dists)
+            return res
         else:
-            return np.concatenate([pos_dists, ori_dists])
+            return -1 * np.concatenate([pos_dists, ori_dists])
 
     def set_desired_pose(self, human_pos, desired_rot_quat):
         if len(self.positions) == self.orig_pos_len:
@@ -343,11 +343,12 @@ if __name__ == "__main__":
         R.from_quat(inspection_ori_quat_from_perturb).inv() *
         R.from_quat(orig_perturb_traj[-1, 3:])).as_quat()
 
-    # rm.load(folder=save_folder, name="online_weights.npz")
-    # # desired rot is just the perturb ori initially
-    # rm.set_desired_pose(inspection_pos_from_perturb, inspection_ori_quat_from_perturb)
-    run_adaptation(rm, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
-                   max_adaptation_time_sec=args.max_adaptation_time_sec)
+    rm.load(folder=save_folder, name="online_weights.npz")
+    # desired rot is just the perturb ori initially
+    rm.set_desired_pose(inspection_pos_from_perturb, inspection_ori_quat_from_perturb)
+
+    # run_adaptation(rm, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
+    #                max_adaptation_time_sec=args.max_adaptation_time_sec)
 
 
 
@@ -426,3 +427,4 @@ if __name__ == "__main__":
             np.savez(os.path.join(save_folder, f"ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npz"), traj=traj.waypts, start_pose=start_pose_noisy, goal_pose=goal_pose_noisy, inspection_pose=inspection_pose_noisy)
 
             pbar.update(1)
+            exit()
