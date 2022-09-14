@@ -106,7 +106,7 @@ class PredefinedReward(object):
         self.orig_pos_len = len(self.positions)
 
         # discrete sampling of some rotations
-        for _ in range(5):
+        for _ in range(10):
             self.orientations.append(rand_quat())
         self.orig_ori_len = len(self.orientations)
 
@@ -131,7 +131,7 @@ class PredefinedReward(object):
                     self.ori_weights @ ori_dists)
             return res
         else:
-            return -1 * np.concatenate([pos_dists, ori_dists])
+            return +1 * np.concatenate([pos_dists, ori_dists])
 
     def set_desired_pose(self, human_pos, desired_rot_quat):
         if len(self.positions) == self.orig_pos_len:
@@ -195,7 +195,7 @@ class PredefinedReward(object):
         # any non-important features should have 0 weight
         # and only important features have high positive weight
         self.pos_weights = np.clip(self.pos_weights, 0, np.Inf)
-        self.ori_weights = np.clip(self.pos_weights, 0, np.Inf)
+        self.ori_weights = np.clip(self.ori_weights, 0, np.Inf)
 
     def load(self, folder, name):
         data = np.load(os.path.join(folder, name), allow_pickle=True)
@@ -343,12 +343,14 @@ if __name__ == "__main__":
         R.from_quat(inspection_ori_quat_from_perturb).inv() *
         R.from_quat(orig_perturb_traj[-1, 3:])).as_quat()
 
-    rm.load(folder=save_folder, name="online_weights.npz")
-    # desired rot is just the perturb ori initially
-    rm.set_desired_pose(inspection_pos_from_perturb, inspection_ori_quat_from_perturb)
+    # rm.load(folder=save_folder, name="online_weights.npz")
+    # # desired rot is just the perturb ori initially
+    # import ipdb
+    # ipdb.set_trace()
+    # rm.set_desired_pose(inspection_pos_from_perturb, inspection_ori_quat_from_perturb)
 
-    # run_adaptation(rm, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
-    #                max_adaptation_time_sec=args.max_adaptation_time_sec)
+    run_adaptation(rm, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
+                   max_adaptation_time_sec=args.max_adaptation_time_sec)
 
 
 
