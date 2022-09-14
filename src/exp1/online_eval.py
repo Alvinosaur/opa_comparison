@@ -427,4 +427,4 @@ if __name__ == "__main__":
             np.savez(os.path.join(save_folder, f"ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npz"), traj=traj.waypts, start_pose=start_pose_noisy, goal_pose=goal_pose_noisy, inspection_pose=inspection_pose_noisy)
 
             pbar.update(1)
-            exit()
+            # exit()
