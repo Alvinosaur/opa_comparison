@@ -51,8 +51,8 @@ def parse_arguments():
                         action='store', type=float)
     parser.add_argument('--num_perturbs', action='store',
                         type=int, required=True)
-    parser.add_argument('--use_inspection_feat', action='store_true',
-                        help="use use_inspection_feat, true features")
+    parser.add_argument('--is_expert', action='store_true',
+                        help="use is_expert, true features")
     args = parser.parse_args()
 
     return args
@@ -96,24 +96,37 @@ class PredefinedReward(object):
         self.pos_weights = np.array([])  # to be optimized
         self.ori_weights = np.array([])  # to be optimized
         self.alpha = 0.001
-        # some random positions of random objects
-        self.positions = [
-            np.array([0.2, 0.35, -0.08]),
-            np.array([0.6, -0.5, 0.1]),
-            np.array([-0.6, 0.2, 0.2]),
-            np.array([0.3, -0.1, 0.1]),
-        ]
-        self.orig_pos_len = len(self.positions)
+        self.is_expert = is_expert
         self.iter = 0
+        if self.is_expert:
+            # some random positions of random objects
+            self.positions = [
+                np.array([0.2, 0.35, -0.08]),
+                np.array([0.6, -0.5, 0.1]),
+                np.array([-0.6, 0.2, 0.2]),
+                np.array([0.3, -0.1, 0.1]),
+            ]
+            self.orig_pos_len = len(self.positions)
+            
+            # discrete sampling of some rotations
+            for _ in range(3):
+                self.orientations.append(rand_quat())
+            self.orig_ori_len = len(self.orientations)
 
-        # discrete sampling of some rotations
-        for _ in range(3):
-            self.orientations.append(rand_quat())
-        self.orig_ori_len = len(self.orientations)
+        else:
+            # no human pose added
+            num_random = 20
+            self.positions = [np.random.normal(loc=0, scale=0.5, size=3)
+                                for _ in range(num_random)]
+            self.orig_pos_len = len(self.positions)
+            
+            # discrete sampling of some rotations
+            self.orientations = [rand_quat() for _ in range(num_random)]
+            self.orig_ori_len = len(self.orientations)
 
         self.pos_weights = np.ones(len(self.positions))
         self.ori_weights = np.ones(len(self.orientations))
-        self.is_expert = is_expert
+        
 
     def dist(self, traj_euler, pos):
         return np.linalg.norm(traj_euler[:, 0:3] - pos, axis=-1).sum()
@@ -142,6 +155,7 @@ class PredefinedReward(object):
             return +1 * np.concatenate([pos_dists, ori_dists])
 
     def set_desired_pose(self, human_pos, desired_rot_quat):
+        assert self.is_expert, "Only add human pose in expert mode!"
         if len(self.positions) == self.orig_pos_len:
             self.positions.append(human_pos)
         else:
@@ -202,15 +216,21 @@ class PredefinedReward(object):
         # weights could be set to negative and optimized incorrectly
         # any non-important features should have 0 weight
         # and only important features have high positive weight
+        # print(self.pos_weights)
         # print(self.ori_weights)
-        self.pos_weights = np.clip(self.pos_weights, 0, np.Inf)
-        self.ori_weights = np.clip(self.ori_weights, 0, np.Inf)
+        # print()
+        self.pos_weights -= np.min(self.pos_weights)
+        self.ori_weights -= np.min(self.ori_weights)
+        # self.pos_weights = np.clip(self.pos_weights, 0, np.Inf)
+        # self.ori_weights = np.clip(self.ori_weights, 0, np.Inf)
+
+        
 
     def load(self, folder, name):
         data = np.load(os.path.join(folder, name), allow_pickle=True)
         self.pos_weights = data["pos_weights"]
         self.ori_weights = data["ori_weights"]
-        # print(self.pos_weights)
+        
         # print(self.ori_weights)
 
     # min_x [ w * dist(x, human) ]
@@ -297,8 +317,9 @@ def run_adaptation(rm: PredefinedReward, save_folder, collected_folder, num_pert
     # all_orig_predicted_pose_traj = np.load("exp1/online_saved_trials_inspection/all_orig_predicted_pose_traj.npy")
     # all_expert_pose_traj = np.load("exp1/online_saved_trials_inspection/all_expert_pose_traj.npy")
 
-    rm.set_desired_pose(inspection_pos, R.from_euler("XYZ", 
-        all_expert_pose_traj[0, 0, 3:]).as_quat())
+    if args.is_expert:
+        rm.set_desired_pose(inspection_pos, R.from_euler("XYZ", 
+                            all_expert_pose_traj[0, 0, 3:]).as_quat())
 
     # Learn weights
     start_time = time.time()
@@ -326,7 +347,7 @@ if __name__ == "__main__":
     argparse_dict = vars(args)
 
     # define save path
-    save_folder = f"exp1/online_saved_trials_inspection/eval_perturbs_{args.num_perturbs}_time_{args.max_adaptation_time_sec}"
+    save_folder = f"exp1/online_is_expert_{args.is_expert}_saved_trials_inspection/eval_perturbs_{args.num_perturbs}_time_{args.max_adaptation_time_sec}"
     os.makedirs(save_folder, exist_ok=True)
 
     # Instead of loading trained model, we train on the fly here so we
@@ -340,8 +361,8 @@ if __name__ == "__main__":
     context_dim = 3 + 3
     input_dim = state_dim + context_dim  # robot pose, human pose
 
-    # use_inspection_feat: use apriori knowledge of human and dist to humna
-    rm = PredefinedReward(is_expert=args.use_inspection_feat)
+    # is_expert: use apriori knowledge of human and dist to humna
+    rm = PredefinedReward(is_expert=args.is_expert)
 
     # -> (left-mult) inv(R_inspection) * R_perturb = R_desired_offset
     # You can verify this makes sense by plotting with plot_ee_traj.py
@@ -361,8 +382,6 @@ if __name__ == "__main__":
 
     run_adaptation(rm, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
                    max_adaptation_time_sec=args.max_adaptation_time_sec)
-
-
 
     it = 0
     pose_error_tol = 0.1
@@ -419,7 +438,7 @@ if __name__ == "__main__":
             ])
 
             # setting human pose
-            if args.use_inspection_feat:
+            if args.is_expert:
                 # NOTE: right-multiply rot offset to get relative to human pose
                 desired_ori_quat = (R.from_euler("XYZ", inspection_pose_noisy[3:]) * R.from_quat(desired_rot_offset)).as_quat()
                 rm.set_desired_pose(
