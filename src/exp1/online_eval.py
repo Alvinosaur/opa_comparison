@@ -96,8 +96,22 @@ class PredefinedReward(object):
         self.pos_weights = np.array([])  # to be optimized
         self.ori_weights = np.array([])  # to be optimized
         self.alpha = 0.01
-        self.orig_pos_len = 0
-        self.orig_ori_len = 0
+        # some random positions of random objects
+        self.positions = [
+            np.array([0.2, 0.35, -0.08]),
+            np.array([0.6, -0.5, 0.1]),
+            np.array([-0.6, 0.2, 0.2]),
+            np.array([0.3, -0.1, 0.1]),
+        ]
+        self.orig_pos_len = len(self.positions)
+
+        # discrete sampling of some rotations
+        for _ in range(5):
+            self.orientations.append(rand_quat())
+        self.orig_ori_len = len(self.orientations)
+
+        self.pos_weights = np.ones(len(self.positions))
+        self.ori_weights = np.ones(len(self.orientations))
         self.is_expert = is_expert
 
     def dist(self, traj_euler, pos):
@@ -111,6 +125,7 @@ class PredefinedReward(object):
         traj = x
         pos_dists = np.array([self.dist(traj, pos) for pos in self.positions])
         ori_dists = np.array([self.ori_dist(traj, ori) for ori in self.orientations])
+        # print(pos_dists)
 
         if ret_single_value:
             return (self.pos_weights @ pos_dists + 
@@ -174,7 +189,13 @@ class PredefinedReward(object):
         else:
             self.pos_weights -= self.alpha * update[0:len(self.pos_weights)]
             self.ori_weights -= self.alpha * update[len(self.pos_weights):]
-
+        
+        # ensure non-negative weights otherwise some non-important 
+        # weights could be set to negative and optimized incorrectly
+        # any non-important features should have 0 weight
+        # and only important features have high positive weight
+        self.pos_weights = np.clip(self.pos_weights, 0, np.Inf)
+        self.ori_weights = np.clip(self.pos_weights, 0, np.Inf)
 
     def load(self, folder, name):
         data = np.load(os.path.join(folder, name), allow_pickle=True)
@@ -208,27 +229,8 @@ def rand_quat() -> np.ndarray:
                      np.sqrt(u) * np.sin(2 * np.pi * w),
                      np.sqrt(u) * np.cos(2 * np.pi * w)])
 
-class MissingReward(PredefinedReward):
-    def __init__(self, is_expert):
-        super().__init__(is_expert)
-        # some random positions of random objects
-        self.positions = [
-            np.array([0.2, 0.35, -0.08]),
-            np.array([0.6, -0.5, 0.1]),
-            np.array([-0.6, 0.2, 0.2]),
-            np.array([0.3, -0.1, 0.1]),
-        ]
-        self.orig_pos_len = len(self.positions)
 
-        # discrete sampling of some rotations
-        for _ in range(5):
-            self.orientations.append(rand_quat())
-        self.orig_ori_len = len(self.orientations)
-
-        self.pos_weights = np.ones(len(self.positions))
-        self.ori_weights = np.ones(len(self.orientations))
-
-def run_adaptation(rm: MissingReward, save_folder, collected_folder, num_perturbs, max_adaptation_time_sec):
+def run_adaptation(rm: PredefinedReward, save_folder, collected_folder, num_perturbs, max_adaptation_time_sec):
     files = os.listdir(collected_folder)
     exp_iter = None
     all_perturb_pose_traj = []
@@ -329,7 +331,7 @@ if __name__ == "__main__":
     input_dim = state_dim + context_dim  # robot pose, human pose
 
     # use_inspection_feat: use apriori knowledge of human and dist to humna
-    rm = MissingReward(is_expert=args.use_inspection_feat)
+    rm = PredefinedReward(is_expert=args.use_inspection_feat)
 
     # -> (left-mult) inv(R_inspection) * R_perturb = R_desired_offset
     # You can verify this makes sense by plotting with plot_ee_traj.py
@@ -341,11 +343,11 @@ if __name__ == "__main__":
         R.from_quat(inspection_ori_quat_from_perturb).inv() *
         R.from_quat(orig_perturb_traj[-1, 3:])).as_quat()
 
-    rm.load(folder=save_folder, name="online_weights.npz")
-    # desired rot is just the perturb ori initially
-    rm.set_desired_pose(inspection_pos_from_perturb, inspection_ori_quat_from_perturb)
-    # run_adaptation(rm, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
-    #                max_adaptation_time_sec=args.max_adaptation_time_sec)
+    # rm.load(folder=save_folder, name="online_weights.npz")
+    # # desired rot is just the perturb ori initially
+    # rm.set_desired_pose(inspection_pos_from_perturb, inspection_ori_quat_from_perturb)
+    run_adaptation(rm, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
+                   max_adaptation_time_sec=args.max_adaptation_time_sec)
 
 
 
