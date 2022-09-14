@@ -53,7 +53,7 @@ def pose_as_quat(pose):
 """
 Commands:
 OPA:
-python eval_saved_traj.py --trials_folder opa_saved_trials_inspection/eval --perturb_folder opa_saved_trials_inspection/perturb_collection
+python eval_saved_traj.py --trials_folder opa_saved_trials_obstacle1/eval_perturbs_1_time_1.0 --perturb_folder opa_saved_trials_obstacle1/perturb_collection
 
 Unified:
 python eval_saved_traj.py --trials_folder unified_saved_trials_inspection/eval --perturb_folder unified_saved_trials_inspection/perturb_collection
@@ -68,10 +68,13 @@ if __name__ == "__main__":
     perturb_iter = 0
     perturb_traj = np.load(os.path.join(
         args.perturb_folder, f"perturb_traj_iter_{perturb_iter}_num_0.npy"))
-    inspection_ori_quat_from_perturb = inspection_ori_quats[perturb_iter]
+    inspection_ori_quat_from_perturb = obstacle_ori_quats[perturb_iter]
 
     # Right-multiply rotational offset with inspection to get relative to inspector pose
+    
     # R_perturb = R_inspection(FROM THE ORIGINAL PERTURBATION) * R_desired_offset
+
+
     # -> (left-mult) inv(R_inspection) * R_perturb = R_desired_offset
     # You can verify this makes sense by plotting with plot_ee_traj.py
     # which shows the estimatedd desired orientation

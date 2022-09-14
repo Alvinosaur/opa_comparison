@@ -113,10 +113,10 @@ class PredefinedReward(object):
         ori_dists = np.array([self.ori_dist(traj, ori) for ori in self.orientations])
 
         if ret_single_value:
-            return (self.pos_weights @ pos_dists + 
+            return -1 * (self.pos_weights @ pos_dists + 
                      self.ori_weights @ ori_dists)
         else:
-            return np.concatenate([pos_dists, ori_dists])
+            return -1 * np.concatenate([pos_dists, ori_dists])
 
     def set_desired_pose(self, human_pos, desired_rot_quat):
         if len(self.positions) == self.orig_pos_len:
@@ -174,6 +174,12 @@ class PredefinedReward(object):
         else:
             self.pos_weights -= self.alpha * update[0:len(self.pos_weights)]
             self.ori_weights -= self.alpha * update[len(self.pos_weights):]
+
+
+    def load(self, folder, name):
+        data = np.load(os.path.join(folder, name), allow_pickle=True)
+        self.pos_weights = data["pos_weights"]
+        self.ori_weights = data["ori_weights"]
         # print(self.pos_weights)
         # print(self.ori_weights)
 
@@ -325,9 +331,23 @@ if __name__ == "__main__":
     # use_inspection_feat: use apriori knowledge of human and dist to humna
     rm = MissingReward(is_expert=args.use_inspection_feat)
 
-    # rm1.load(folder=load_folder, name="exp_0_adapt_iter_0")
-    run_adaptation(rm, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
-                   max_adaptation_time_sec=args.max_adaptation_time_sec)
+    # -> (left-mult) inv(R_inspection) * R_perturb = R_desired_offset
+    # You can verify this makes sense by plotting with plot_ee_traj.py
+    # which shows the estimatedd desired orientation
+    inspection_ori_quat_from_perturb = inspection_ori_quats[0]
+    inspection_pos_from_perturb = inspection_poses[0]
+    orig_perturb_traj = np.load("/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials_inspection/perturb_collection/perturb_traj_iter_0_num_0.npy")
+    desired_rot_offset = (
+        R.from_quat(inspection_ori_quat_from_perturb).inv() *
+        R.from_quat(orig_perturb_traj[-1, 3:])).as_quat()
+
+    rm.load(folder=save_folder, name="online_weights.npz")
+    # desired rot is just the perturb ori initially
+    rm.set_desired_pose(inspection_pos_from_perturb, inspection_ori_quat_from_perturb)
+    # run_adaptation(rm, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
+    #                max_adaptation_time_sec=args.max_adaptation_time_sec)
+
+
 
     it = 0
     pose_error_tol = 0.1
@@ -382,6 +402,13 @@ if __name__ == "__main__":
                 inspection_pose_euler[0:3] + rand_pos_noise(),
                 inspection_pose_euler[3:] + rand_rot_euler_noise()
             ])
+
+            # setting human pose
+            if args.use_inspection_feat:
+                # NOTE: right-multiply rot offset to get relative to human pose
+                desired_ori_quat = (R.from_euler("XYZ", inspection_pose_noisy[3:]) * R.from_quat(desired_rot_offset)).as_quat()
+                rm.set_desired_pose(
+                    desired_rot_quat=desired_ori_quat, human_pos=inspection_pose_noisy[0:3])
             
             trajopt = TrajOptExp(home=start_pose_noisy,
                                 goal=goal_pose_noisy,
