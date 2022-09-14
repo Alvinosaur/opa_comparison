@@ -115,7 +115,7 @@ class PredefinedReward(object):
 
         else:
             # no human pose added
-            num_random = 20
+            num_random = 5
             self.positions = [np.random.normal(loc=0, scale=0.5, size=3)
                                 for _ in range(num_random)]
             self.orig_pos_len = len(self.positions)

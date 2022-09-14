@@ -257,9 +257,6 @@ if __name__ == "__main__":
 
             pbar.update(1)
 
-    exit()
-
-
         # local_target_pos = traj.waypts[0, 0:3]
         # local_target_ori_quat = R.from_euler(
         #     "XYZ", traj.waypts[0, 3:]).as_quat()

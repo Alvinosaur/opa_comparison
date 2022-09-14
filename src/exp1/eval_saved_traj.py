@@ -60,6 +60,8 @@ python eval_saved_traj.py --trials_folder unified_saved_trials_inspection/eval -
 
 """
 
+# folders = os.("/home/ruic/Documents/opa/opa_comparison/src/exp1")
+
 if __name__ == "__main__":
     args = parse_arguments()
     num_exps = len(start_poses)
@@ -68,7 +70,7 @@ if __name__ == "__main__":
     perturb_iter = 0
     perturb_traj = np.load(os.path.join(
         args.perturb_folder, f"perturb_traj_iter_{perturb_iter}_num_0.npy"))
-    inspection_ori_quat_from_perturb = obstacle_ori_quats[perturb_iter]
+    inspection_ori_quat_from_perturb = inspection_ori_quats[perturb_iter]
 
     # Right-multiply rotational offset with inspection to get relative to inspector pose
     
