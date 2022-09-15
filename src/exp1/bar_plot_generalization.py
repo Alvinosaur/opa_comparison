@@ -14,27 +14,20 @@ def save_tikz_dat_file(fpath, array):
     ])
     np.savetxt(fpath, array)
 
-
-def parse_arguments():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--trials_folder', action='store',
-                        type=str, help="saved trial trajectory folder")
-    args = parser.parse_args()
-
-    return args
-
-args = parse_arguments()
-
 all_data = []
-methods = ["opa", "unified", "ferl", "online"]
+methods = ["opa", "unified", "ferl", "online(oracle)", "online(missing)"]
 folders = [
     "opa_saved_trials_inspection/eval_perturbs_1_time_60.0",
     "unified_saved_trials_inspection/eval_perturbs_10_time_100.0",
-    "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_saved_eval/eval_perturbs_10_time_300.0/",
-    "opa_saved_trials_inspection/eval_perturbs_1_time_60.0",
+    "ferl_saved_trials_inspection_saved_eval/eval_perturbs_10_time_300.0/",
+
+    "online_is_expert_False_saved_trials_inspection/eval_perturbs_10_time_30.0",
+    "online_is_expert_True_saved_trials_inspection/eval_perturbs_10_time_30.0",
 ]
-for method in methods:
-    metrics_data = np.load(os.path.join(args.trials_folder, "metrics.npz"))
+# 1s, 10s, 30s, 60s, 100s, 300s
+# 
+for method, folder in zip(methods, folders):
+    metrics_data = np.load(os.path.join(folder, "metrics.npz"))
     all_pos_costs = metrics_data["all_pos_costs"]
     all_rot_costs = metrics_data["all_rot_costs"]
 

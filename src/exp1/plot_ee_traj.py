@@ -51,7 +51,7 @@ def load_pose_as_quat(pose):
     elif pose.shape[-1] == 6:
         print("CONVERTING EULER TO QUAT...")
         if len(pose.shape) > 1:
-            return np.concatenate([pose[..., 0:3], R.from_euler("XYZ", pose[..., 3:]).as_quat()])
+            return np.hstack([pose[..., 0:3], R.from_euler("XYZ", pose[..., 3:]).as_quat()])
         else:
             return np.concatenate([pose[0:3], R.from_euler("XYZ", pose[3:]).as_quat()])
     else:
@@ -66,7 +66,7 @@ def view_trained_reward_traj(perturb_path, path):
     inspection_ori_quat_from_perturb = inspection_ori_quats[perturb_iter]
 
     generated_traj_data = np.load(path, allow_pickle=True)
-    ee_pose_traj = generated_traj_data["traj"]
+    ee_pose_traj = load_pose_as_quat(generated_traj_data["traj"])
     start_pose = load_pose_as_quat(generated_traj_data["start_pose"])
     goal_pose = load_pose_as_quat(generated_traj_data["goal_pose"])
     inspection_pose = load_pose_as_quat(generated_traj_data["inspection_pose"])
