@@ -4,6 +4,7 @@ import os
 from scipy.spatial.transform import Rotation as R
 import time
 import signal
+from tqdm import tqdm
 
 import rospy
 
@@ -252,9 +253,18 @@ if __name__ == "__main__":
                 # Perform adaptation and re-run trajopt
                 context = obstacle_pose_euler[np.newaxis, :].repeat(
                     40, axis=0)
-                    
+
                 if exp_iter == 0:
-                    rm1.train_rewards([ perturb_pose_traj_euler, ], context=context)
+                    num_deforms = 1000
+                    deformed = []
+                    for _ in tqdm(range(num_deforms)):
+                        rand_noise = np.random.normal(0, rm1.noise, rm1.action_dim)
+                        demo_deformed = rm1.deform(perturb_pose_traj_euler, rand_noise)
+                        demo_deformed_tensor = torch.from_numpy(
+                            demo_deformed).to(DEVICE).to(torch.float32)
+                        deformed.append(demo_deformed_tensor)
+
+                    rm1.train_rewards(deformed=deformed, demos=[ perturb_pose_traj_euler, ], context=context)
 
                     # Save adapted reward model
                     rm1.save(folder=save_folder,

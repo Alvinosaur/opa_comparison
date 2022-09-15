@@ -45,57 +45,71 @@ def draw_coordinate_frame(ax, T, R):
     ax.add_artist(a)
 
 
+def load_pose_as_quat(pose):
+    if pose.shape[-1] == 7:
+        return pose
+    elif pose.shape[-1] == 6:
+        print("CONVERTING EULER TO QUAT...")
+        if len(pose.shape) > 1:
+            return np.concatenate([pose[..., 0:3], R.from_euler("XYZ", pose[..., 3:]).as_quat()])
+        else:
+            return np.concatenate([pose[0:3], R.from_euler("XYZ", pose[3:]).as_quat()])
+    else:
+        raise Exception("Unexpected pose shape! ", pose.shape)
+
 def view_trained_reward_traj(perturb_path, path):
     ax = plt.axes(projection='3d')
 
-    exp_iter = int(re.findall("ee_pose_traj_iter_(\d+).npy", path)[0])
+    perturb_iter = int(re.findall(
+        "perturb_traj_iter_(\d+)_num_\d+.npy", perturb_path)[0])
+    inspection_ori_quat_from_perturb = obstacle_ori_quats[perturb_iter]
+
+    generated_traj_data = np.load(path, allow_pickle=True)
+    ee_pose_traj = generated_traj_data["traj"]
+    start_pose = load_pose_as_quat(generated_traj_data["start_pose"])
+    goal_pose = load_pose_as_quat(generated_traj_data["goal_pose"])
+    inspection_pose = load_pose_as_quat(np.hstack([generated_traj_data["obstacle_pose"][:3], np.array([0, 0, 0, 1])]))
 
     perturb_traj = np.load(perturb_path)
     ax.plot3D(perturb_traj[:, 0], perturb_traj[:, 1], perturb_traj[:, 2],
               label="perturb", color="black", linewidth=5)
+
+    # draw estimated ground truth desired orientation
+    # Right-multiply rotational offset with inspection to get relative to inspector pose
+    # R_perturb = R_inspection(FROM THE ORIGINAL PERTURBATION) * R_desired_offset
+    # -> (left-mult) inv(R_inspection) * R_perturb = R_desired_offset
+    desired_rot_offset = (
+        R.from_quat(inspection_ori_quat_from_perturb).inv() *
+        R.from_quat(perturb_traj[-1, 3:])).as_quat()
+    # NOTE: right-multiply rot offset to get relative to (FROM CURRENT SCENARIO) human pose
+    desired_rot = (R.from_quat(inspection_pose[3:]) *
+                   R.from_quat(desired_rot_offset)).as_quat()
     draw_coordinate_frame(ax,
                           T=perturb_traj[-1, 0:3],
-                          R=R.from_quat(perturb_traj[-1, 3:]).as_matrix())
-
-    # Set start robot pose
-    start_pos = start_poses[exp_iter]
-    start_ori_quat = start_ori_quats[exp_iter]
-    start_ori_euler = R.from_quat(start_ori_quat).as_euler("XYZ")
-    start_pose = np.concatenate([start_pos, start_ori_euler])
-    start_pose_quat = np.concatenate([start_pos, start_ori_quat])
-
-    # Set goal robot pose
-    goal_pos = goal_poses[exp_iter]
-    goal_ori_quat = goal_ori_quats[exp_iter]
-    goal_ori_euler = R.from_quat(goal_ori_quat).as_euler("XYZ")
-    goal_pose = np.concatenate([goal_pos, goal_ori_euler])
-    goal_pose_quat = np.concatenate([goal_pos, goal_ori_quat])
-
-    # Set obstacle pose
-    obstacle_pos_world = obstacle_poses[exp_iter]
-    obstacle_ori_quat = obstacle_ori_quats[exp_iter]
-    obstacle_ori_euler = R.from_quat(obstacle_ori_quat).as_euler("XYZ")
-    obstacle_pose_euler = np.concatenate(
-        [obstacle_pos_world, obstacle_ori_euler])
+                          R=R.from_quat(desired_rot).as_matrix())
+    print("NOTE: Final Perturbation Orientation is estimated for the current human pose! Perturbation position traj isn't changed from the original recording!!!!!!!!")
 
 
-    ee_pose_traj = np.load(path)
+    T = ee_pose_traj.shape[0]
     print(ee_pose_traj.shape[0])
     for t in range(ee_pose_traj.shape[0]):
         ax.plot3D(ee_pose_traj[t:t + 2, 0], ee_pose_traj[t:t + 2, 1],
                   ee_pose_traj[t:t + 2, 2], alpha=0.9, color=cm.jet(t / T), linewidth=3)
 
         if t % 3 == 0:
+            # draw_coordinate_frame(ax,
+            #                       T=ee_pose_traj[t, 0:3],
+            #                       R=R.from_quat(ee_pose_traj[t, 3:]).as_matrix())
             draw_coordinate_frame(ax,
                                   T=ee_pose_traj[t, 0:3],
-                                  R=R.from_quat(ee_pose_traj[t, 3:]).as_matrix())
+                                  R=R.from_quat(inspection_pose[3:]).as_matrix())
 
     ax.scatter(*start_pose[:3], label="Start")
     ax.scatter(*goal_pose[:3], label="Goal")
-    ax.scatter(*obstacle_pos_world, label="Human")
+    ax.scatter(*inspection_pose[:3], label="Human")
     draw_coordinate_frame(ax,
-                          T=obstacle_pos_world,
-                          R=R.from_quat(obstacle_ori_quat).as_matrix())
+                          T=inspection_pose[:3],
+                          R=R.from_quat(inspection_pose[3:]).as_matrix())
 
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
@@ -122,10 +136,12 @@ if __name__ == "__main__":
 
 """
 Commands:
-OPA executed traj 0 with perturb at iter 1:
-    python plot_ee_traj.py --path opa_saved_trials_inspection/eval/ee_pose_traj_iter_0.npy --perturb_path opa_saved_trials_inspection/perturb_collection/perturb_traj_iter_1_num_0.npy
+OPA executed traj 0 with perturb at iter 0:
+    python plot_ee_traj.py --path opa_saved_trials_inspection/eval/ee_pose_traj_iter_0.npy --perturb_path opa_saved_trials_inspection/perturb_collection/perturb_traj_iter_0_num_0.npy
 
 Unified:
-    python plot_ee_traj.py --path unified_saved_trials_inspection/eval/ee_pose_traj_iter_0.npy --perturb_path unified_saved_trials_inspection/perturb_collection/perturb_traj_iter_0_num_0.npy
+    python3 plot_ee_traj.py --path online_is_expert_True_saved_trials_obstacle1//eval_perturbs_1_time_60.0/ee_pose_traj_iter_1_rand_trial_0.npz --perturb_path unified_saved_trials_obstacle1/perturb_collection/perturb_traj_iter_0_num_0.npy
 
+Online:
+    python3 plot_ee_traj.py --path online_is_expert_True_saved_trials_inspection/eval_perturbs_1_time_60.0/ee_pose_traj_iter_0_rand_trial_0.npz --perturb_path unified_saved_trials_obstacle1/perturb_collection/perturb_traj_iter_0_num_0.npy
 """

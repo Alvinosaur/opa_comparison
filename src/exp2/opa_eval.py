@@ -8,6 +8,7 @@ import os
 import argparse
 import json
 import re
+import time
 
 import torch
 import sys
@@ -34,6 +35,10 @@ DEBUG = True
 dstep = 0.05
 ros_delay = 0.1
 
+seed = 123
+np.random.seed(seed)
+torch.manual_seed(seed)
+
 obstacle_radii = np.array([2.5])[:, np.newaxis]  # defined on net scale
 goal_rot_radius = np.array([4.0])
 obstacle_rot_radii = np.array([0])
@@ -57,19 +62,25 @@ def parse_arguments():
     return args
 
 
-def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adaptation_time_sec):
+def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adaptation_time_sec, save_folder):
     files = os.listdir(collected_folder)
     exp_iter = None
     all_perturb_pose_traj = []
     for f in files:
+        
         matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
         if len(matches) > 0:
             exp_iter = int(matches[0])
 
             if len(all_perturb_pose_traj) < num_perturbs:
+                print(f)
                 perturb_pose_traj = np.load(os.path.join(
                     collected_folder, f))
                 all_perturb_pose_traj.append(perturb_pose_traj)
+            else:
+                break
+    print("USING {} perturb trajs".format(len(all_perturb_pose_traj)))
+    exp_iter = 0
 
     start_pos_world = start_poses[exp_iter]
     start_ori_quat = start_ori_quats[exp_iter]
@@ -122,7 +133,7 @@ def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adap
         processed_sample = process_single_full_traj(sample)
         all_processed_samples.append(processed_sample)
 
-    # include initial data processing in adaptation time
+    start_time = time.time()
     if max_adaptation_time_sec is not None:
         max_adaptation_time_sec -= (time.time() - start_time)
     else:
@@ -159,6 +170,7 @@ def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adap
                                allowed_time=rot_adapt_time))
 
     policy.update_obj_feats(best_pos_feats, best_rot_feats, best_rot_offsets)
+    policy.save(os.path.join(save_folder, "opa_model.pth"))
 
 
 if __name__ == "__main__":
@@ -167,11 +179,11 @@ if __name__ == "__main__":
     argparse_dict = vars(args)
 
     # define save path
-    save_folder = f"exp2/opa_saved_trials_obstacle2/eval_perturbs_{args.num_perturbs}_time_{args.max_adaptation_time_sec}"
+    save_folder = f"opa_saved_trials_obstacle1/eval_perturbs_{args.num_perturbs}_time_{args.max_adaptation_time_sec}"
     os.makedirs(save_folder, exist_ok=True)
 
     # Load trained model arguments
-    model_root = "../../saved_model_files"
+    model_root = "../../../saved_model_files"
     model_name = "policy_3D"
     loaded_epoch = 100
     with open(os.path.join(model_root, model_name, "train_args_pt_1.json"), "r") as f:
@@ -243,7 +255,8 @@ if __name__ == "__main__":
     CLIP_PARAMS = False
     run_adaptation(policy, collected_folder=args.collected_folder,
                    clip_params=CLIP_PARAMS, num_perturbs=args.num_perturbs,
-                   max_adaptation_time_sec=args.max_adaptation_time_sec)
+                   max_adaptation_time_sec=args.max_adaptation_time_sec,
+                   save_folder=save_folder)
 
     it = 0
     pose_error_tol = 0.1
@@ -252,135 +265,146 @@ if __name__ == "__main__":
 
     num_exps = len(start_poses)
 
-    # num_exps = 3
+    def rand_pos_noise():
+        return np.random.normal(loc=0, scale=0.05, size=3)
+    def rand_rot_euler_noise():
+        return np.random.normal(loc=0, scale=5 * np.pi / 180, size=3)
+
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up
         # exp_iter = num_exps - 1
         exp_iter = min(exp_iter, num_exps - 1)
         extra_mass = extra_masses[exp_iter]
 
-        # Set start robot pose
-        start_pos_world = start_poses[exp_iter]
-        start_ori_quat = start_ori_quats[exp_iter]
-        start_pose_world = np.concatenate([start_pos_world, start_ori_quat])
-        start_pose_net = np.concatenate(
-            [start_pos_world * World2Net, start_ori_quat])
-        start_tensor = torch.from_numpy(
-            pose_to_model_input(start_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
+        for rand_trial in range(10):
+            # Set start robot pose
+            start_pos_world = start_poses[exp_iter] + rand_pos_noise()
+            start_ori_quat = R.from_euler("XYZ",
+                    R.from_quat(start_ori_quats[exp_iter]).as_euler("XYZ") + rand_rot_euler_noise()
+            ).as_quat()
+            start_pose_world = np.concatenate([start_pos_world, start_ori_quat])
+            start_pose_net = np.concatenate(
+                [start_pos_world * World2Net, start_ori_quat])
+            start_tensor = torch.from_numpy(
+                pose_to_model_input(start_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
 
-        # Set goal robot pose
-        goal_pos_world = goal_poses[exp_iter]
-        goal_ori_quat = goal_ori_quats[exp_iter]
-        goal_pose_net = np.concatenate(
-            [goal_pos_world * World2Net, goal_ori_quat])
-        goal_pose_world = np.concatenate([goal_pos_world, goal_ori_quat])
+            # Set goal robot pose
+            goal_pos_world = goal_poses[exp_iter] + rand_pos_noise()
+            goal_ori_quat = R.from_euler("XYZ",
+                    R.from_quat(goal_ori_quats[exp_iter]).as_euler("XYZ") + rand_rot_euler_noise()
+            ).as_quat()
+            goal_pose_net = np.concatenate(
+                [goal_pos_world * World2Net, goal_ori_quat])
+            goal_pose_world = np.concatenate([goal_pos_world, goal_ori_quat])
 
-        obstacle_pos_world = obstacle_poses[exp_iter]
-        obstacle_ori_quat = obstacle_ori_quats[exp_iter]
-        obstacle_pose_net = np.concatenate(
-            [World2Net * obstacle_pos_world, obstacle_ori_quat], axis=-1)[np.newaxis]
-        obstacle_pose_tensor = torch.from_numpy(pose_to_model_input(
-            obstacle_pose_net)).to(torch.float32).to(DEVICE)
+            obstacle_pos_world = obstacle_poses[exp_iter] + rand_pos_noise()
+            obstacle_ori_quat = R.from_euler("XYZ",
+                    R.from_quat(obstacle_ori_quats[exp_iter]).as_euler("XYZ") + rand_rot_euler_noise()
+            ).as_quat()
+            obstacle_pose_net = np.concatenate(
+                [World2Net * obstacle_pos_world, obstacle_ori_quat], axis=-1)[np.newaxis]
+            obstacle_pose_tensor = torch.from_numpy(pose_to_model_input(
+                obstacle_pose_net)).to(torch.float32).to(DEVICE)
 
-        object_poses_net = obstacle_pose_net
-        objects_tensor = obstacle_pose_tensor
-        objects_torch = torch.cat(
-            [objects_tensor, object_radii_torch], dim=-1).unsqueeze(0)
-        objects_rot_torch = torch.cat(
-            [objects_tensor, object_rot_radii_torch], dim=-1).unsqueeze(0)
+            object_poses_net = obstacle_pose_net
+            objects_tensor = obstacle_pose_tensor
+            objects_torch = torch.cat(
+                [objects_tensor, object_radii_torch], dim=-1).unsqueeze(0)
+            objects_rot_torch = torch.cat(
+                [objects_tensor, object_rot_radii_torch], dim=-1).unsqueeze(0)
 
-        # initialize target pose variables
-        cur_pos = np.copy(start_pose_world[0:3])
-        cur_ori_quat = np.copy(start_pose_world[3:])
+            # initialize target pose variables
+            cur_pos = np.copy(start_pose_world[0:3])
+            cur_ori_quat = np.copy(start_pose_world[3:])
 
-        intervene_count = 0
-        pose_error = 1e10
-        del_pose = 1e10
-        del_pose_running_avg = RunningAverage(length=5, init_vals=1e10)
+            intervene_count = 0
+            pose_error = 1e10
+            del_pose = 1e10
+            del_pose_running_avg = RunningAverage(length=5, init_vals=1e10)
 
-        ee_pose_traj = []
+            ee_pose_traj = []
 
-        prev_pose_world = None
-        step = 0
-        max_steps = 50
-        while (not rospy.is_shutdown() and pose_error > pose_error_tol and
-                (pose_error > max_pose_error_tol) and step < max_steps):
-            step += 1
-            cur_pose_world = np.concatenate(
-                [cur_pos.copy(), cur_ori_quat.copy()])
-            cur_pos_net = cur_pos * World2Net
-            cur_pose_net = np.concatenate([cur_pos_net, cur_ori_quat])
-            pose_error = calc_pose_error(
-                goal_pose_world, cur_pose_world, rot_scale=0)
-            if prev_pose_world is not None:
-                del_pose = calc_pose_error(prev_pose_world, cur_pose_world)
-                del_pose_running_avg.update(del_pose)
+            prev_pose_world = None
+            step = 0
+            max_steps = 50
+            while (not rospy.is_shutdown() and pose_error > pose_error_tol and
+                    (pose_error > max_pose_error_tol) and step < max_steps):
+                step += 1
+                cur_pose_world = np.concatenate(
+                    [cur_pos.copy(), cur_ori_quat.copy()])
+                cur_pos_net = cur_pos * World2Net
+                cur_pose_net = np.concatenate([cur_pos_net, cur_ori_quat])
+                pose_error = calc_pose_error(
+                    goal_pose_world, cur_pose_world, rot_scale=0)
+                if prev_pose_world is not None:
+                    del_pose = calc_pose_error(prev_pose_world, cur_pose_world)
+                    del_pose_running_avg.update(del_pose)
 
-            ee_pose_traj.append(cur_pose_world.copy())
-            print("dist_to_goal: ", pose_error)
+                ee_pose_traj.append(cur_pose_world.copy())
+                if step % 5 == 0:
+                    print("dist_to_goal: ", pose_error)
 
-            with torch.no_grad():
-                # Define "object" inputs into policy
-                # current
-                cur_pose_tensor = torch.from_numpy(
-                    pose_to_model_input(cur_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
-                current = torch.cat(
-                    [cur_pose_tensor, agent_radius_tensor], dim=-1).unsqueeze(1)
-                # goal
-                goal_tensor = torch.from_numpy(
-                    pose_to_model_input(goal_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
-                goal_radii = goal_radius_scale_custom * torch.norm(
-                    goal_tensor[:, :pos_dim] -
-                    cur_pose_tensor[:, :pos_dim],
-                    dim=-1).unsqueeze(0)
-                goal_rot_objects = torch.cat(
-                    [goal_tensor, goal_rot_radii], dim=-1).unsqueeze(1)
-                goal_objects = torch.cat(
-                    [goal_tensor, goal_radii], dim=-1).unsqueeze(1)
-                # start
-                start_rot_radii = torch.norm(start_tensor[:, :pos_dim] - cur_pose_tensor[:, :pos_dim],
-                                             dim=-1).unsqueeze(0)
-                start_rot_objects = torch.cat(
-                    [start_tensor, start_rot_radii], dim=-1).unsqueeze(1)
+                with torch.no_grad():
+                    # Define "object" inputs into policy
+                    # current
+                    cur_pose_tensor = torch.from_numpy(
+                        pose_to_model_input(cur_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
+                    current = torch.cat(
+                        [cur_pose_tensor, agent_radius_tensor], dim=-1).unsqueeze(1)
+                    # goal
+                    goal_tensor = torch.from_numpy(
+                        pose_to_model_input(goal_pose_net[np.newaxis])).to(torch.float32).to(DEVICE)
+                    goal_radii = goal_radius_scale_custom * torch.norm(
+                        goal_tensor[:, :pos_dim] -
+                        cur_pose_tensor[:, :pos_dim],
+                        dim=-1).unsqueeze(0)
+                    goal_rot_objects = torch.cat(
+                        [goal_tensor, goal_rot_radii], dim=-1).unsqueeze(1)
+                    goal_objects = torch.cat(
+                        [goal_tensor, goal_radii], dim=-1).unsqueeze(1)
+                    # start
+                    start_rot_radii = torch.norm(start_tensor[:, :pos_dim] - cur_pose_tensor[:, :pos_dim],
+                                                dim=-1).unsqueeze(0)
+                    start_rot_objects = torch.cat(
+                        [start_tensor, start_rot_radii], dim=-1).unsqueeze(1)
 
-                # Get policy output, form into action
-                pred_vec, pred_ori, object_forces = policy(current=current,
-                                                           start=start_rot_objects,
-                                                           goal=goal_objects, goal_rot=goal_rot_objects,
-                                                           objects=objects_torch,
-                                                           objects_rot=objects_rot_torch,
-                                                           object_indices=object_idxs_tensor,
-                                                           calc_rot=calc_rot,
-                                                           calc_pos=calc_pos)
-                local_target_pos_world = cur_pose_tensor[0,
-                                                         0:pos_dim] * Net2World
-                local_target_pos_world = local_target_pos_world + \
-                    dstep * pred_vec[0, :pos_dim]
-                local_target_pos_world = local_target_pos_world.detach().cpu().numpy()
-                local_target_ori = decode_ori(
-                    pred_ori.detach().cpu().numpy()).flatten()
+                    # Get policy output, form into action
+                    pred_vec, pred_ori, object_forces = policy(current=current,
+                                                            start=start_rot_objects,
+                                                            goal=goal_objects, goal_rot=goal_rot_objects,
+                                                            objects=objects_torch,
+                                                            objects_rot=objects_rot_torch,
+                                                            object_indices=object_idxs_tensor,
+                                                            calc_rot=calc_rot,
+                                                            calc_pos=calc_pos)
+                    local_target_pos_world = cur_pose_tensor[0,
+                                                            0:pos_dim] * Net2World
+                    local_target_pos_world = local_target_pos_world + \
+                        dstep * pred_vec[0, :pos_dim]
+                    local_target_pos_world = local_target_pos_world.detach().cpu().numpy()
+                    local_target_ori = decode_ori(
+                        pred_ori.detach().cpu().numpy()).flatten()
 
-            override_pred_delay = False
+                override_pred_delay = False
 
-            # Apply low-pass filter to smooth out policy's sudden changes in orientation
-            interp_rot = interpolate_rotations(
-                start_quat=cur_ori_quat, stop_quat=local_target_ori, alpha=0.7)
+                # Apply low-pass filter to smooth out policy's sudden changes in orientation
+                interp_rot = interpolate_rotations(
+                    start_quat=cur_ori_quat, stop_quat=local_target_ori, alpha=0.7)
 
-            cur_pos = local_target_pos_world
-            cur_ori_quat = interp_rot
+                cur_pos = local_target_pos_world
+                cur_ori_quat = interp_rot
 
-            it += 1
-            prev_pose_world = np.copy(cur_pose_world)
-            rospy.sleep(0.3)
+                it += 1
+                prev_pose_world = np.copy(cur_pose_world)
+                # rospy.sleep(0.3)
 
-        # Save robot traj and intervene traj
-        print("FULL TRAJ:")
-        print(ee_pose_traj)
-        np.save(f"{save_folder}/ee_pose_traj_iter_{exp_iter}.npy", ee_pose_traj)
+            # Save robot traj and intervene traj
+            print("Done!")
+            np.savez(f"{save_folder}/ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npz", traj=ee_pose_traj, start_pose=start_pose_world, goal_pose=goal_pose_world, obstacle_pose=obstacle_pos_world)
 
-        print(
-            f"Finished! Error {pose_error} vs tol {pose_error_tol}, \nderror {del_pose_running_avg.avg} vs tol {del_pose_tol}")
-        print("Opening gripper to release item")
+            print(
+                f"Finished! Error {pose_error} vs tol {pose_error_tol}, \nderror {del_pose_running_avg.avg} vs tol {del_pose_tol}")
+            print("Opening gripper to release item")
 
 """
 Run in opa_comparison/src folder (NOT in individual exp folder):
