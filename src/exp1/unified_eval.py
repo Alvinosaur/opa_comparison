@@ -108,6 +108,7 @@ def run_adaptation(rm, collected_folder, num_perturbs, max_adaptation_time_sec,
                 ])
 
                 all_perturb_pose_traj.append(perturb_pose_traj_euler)
+    num_perturbs = len(all_perturb_pose_traj)
 
     exp_iter = 0  # always perturbation at 0th iter setting
     # Set inspection pose
