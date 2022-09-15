@@ -281,13 +281,13 @@ if __name__ == "__main__":
                 context = inspection_pose_euler[np.newaxis, :].repeat(
                     40, axis=0)
                 
-                if exp_iter == 0:
-                    rm1.train_rewards([ perturb_pose_traj_euler, ], context=context)
+                # if exp_iter == 0:
+                #     rm1.train_rewards([ perturb_pose_traj_euler, ], context=context)
 
-                    # Save adapted reward model
-                    rm1.save(folder=save_folder,
-                            name=f"exp_{exp_iter}_adapt_iter_{adapt_iter}")
-                    adapt_iter += 1
+                #     # Save adapted reward model
+                #     rm1.save(folder=save_folder,
+                #             name=f"exp_{exp_iter}_adapt_iter_{adapt_iter}")
+                #     adapt_iter += 1
 
                 # Re-run trajopt at final, perturbed state
                 trajopt = TrajOptExp(home=cur_pose,

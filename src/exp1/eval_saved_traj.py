@@ -23,11 +23,12 @@ def calc_regret(traj, human_pose, desired_rot_offset):
                    R.from_quat(desired_rot_offset)).as_quat()
     import ipdb
     ipdb.set_trace()
-    pos_cost = np.min(np.linalg.norm(
+    pos_cost = np.mean(np.linalg.norm(
         traj[:, 0:3] - human_pose[np.newaxis, 0:3], axis=-1))
 
     # (T x 4) * (4,) = (T,)
-    rot_cost = np.min(
+    # TODO: try both min and mean
+    rot_cost = np.mean(
         np.arccos(np.abs(traj[:, 3:] @ desired_rot))
     )
 

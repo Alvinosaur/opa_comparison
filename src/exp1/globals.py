@@ -26,6 +26,8 @@ POS_DIM = 3
 DROP_OFF_OFFSET = np.array([0.0, 0.0, -0.1])
 goal_radius_scale_custom = 0.45
 
+T = 20.0  # taken from FERL yaml file
+
 # Item ID's (if item == can, slide into grasp pose horizontally)
 BOX_ID = 0
 CAN_ID = 1

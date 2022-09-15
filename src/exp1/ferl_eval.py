@@ -85,7 +85,7 @@ def parse_arguments():
 
 
 if __name__ == "__main__":
-    # python exp1/ferl_eval.py --exp_folder eval_perturbs_10_time_600.0
+    # cd exp1 && python ferl_eval.py --exp_folder eval_perturbs_10_time_600.0
     ########################################################
     args = parse_arguments()
     argparse_dict = vars(args)
