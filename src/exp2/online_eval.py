@@ -106,26 +106,26 @@ class PredefinedReward(object):
                 np.array([-0.6, 0.2, 0.2]),
                 np.array([0.3, -0.1, 0.1]),
             ]
-            self.orig_pos_len = len(self.positions)
+            self.orig_pos_len = len(self.positions) * 2
             
             # discrete sampling of some rotations
             for _ in range(3):
                 self.orientations.append(rand_quat())
-            self.orig_ori_len = len(self.orientations)
+            self.orig_ori_len = len(self.orientations) * 2
 
         else:
             # no human pose added
             num_random = 5
             self.positions = [np.random.normal(loc=0, scale=0.5, size=3)
                                 for _ in range(num_random)]
-            self.orig_pos_len = len(self.positions)
+            self.orig_pos_len = len(self.positions)  * 2
             
             # discrete sampling of some rotations
             self.orientations = [rand_quat() for _ in range(num_random)]
-            self.orig_ori_len = len(self.orientations)
+            self.orig_ori_len = len(self.orientations) * 2
 
-        self.pos_weights = np.ones(len(self.positions))
-        self.ori_weights = np.ones(len(self.orientations))
+        self.pos_weights = np.ones(self.orig_pos_len)
+        self.ori_weights = np.ones(self.orig_ori_len)
         
 
     def dist(self, traj_euler, pos):
@@ -140,7 +140,9 @@ class PredefinedReward(object):
     def reward(self, x, ret_single_value=True):
         traj = x
         pos_dists = np.array([self.dist(traj, pos) for pos in self.positions])
+        neg_pos_dists = -pos_dists
         ori_dists = np.array([self.ori_dist(traj, ori) for ori in self.orientations])
+        neg_ori_dists = -ori_dists
 
         # Special treatment for obj avoidence
         rot_weight = 0.0
@@ -150,12 +152,12 @@ class PredefinedReward(object):
 
         if ret_single_value:
             # if self.iter % 50 == 0:
-            #     print(self.iter, self.pos_weights @ pos_dists, rot_weight * self.ori_weights @ ori_dists)
-            res = -1 * (self.pos_weights @ pos_dists + 
-                    rot_weight * self.ori_weights @ ori_dists)
+            #     print(self.iter, self.pos_weights @ pos_dists, rot_weight * self.ori_weights @
+            res = 1 * (self.pos_weights @ np.concatenate([pos_dists, neg_pos_dists]) + 
+                    rot_weight * self.ori_weights @ np.concatenate([ori_dists, neg_ori_dists]))
             return res
         else:
-            return +1 * np.concatenate([pos_dists, ori_dists])
+            return +1 * np.concatenate([pos_dists, neg_pos_dists, ori_dists, neg_ori_dists])
 
         # if ret_single_value:
         #     return 0
@@ -163,8 +165,6 @@ class PredefinedReward(object):
         #      return 0 * np.concatenate([pos_dists, ori_dists])
 
     def set_desired_pose(self, human_pos, desired_rot_quat):
-        import ipdb
-        ipdb.set_trace()
         assert self.is_expert, "Only add human pose in expert mode!"
         if len(self.positions) == self.orig_pos_len:
             self.positions.append(human_pos)
@@ -178,7 +178,9 @@ class PredefinedReward(object):
 
         if len(self.pos_weights) < len(self.positions):
             self.pos_weights = np.append(self.pos_weights, 1)
+            self.pos_weights = np.append(self.pos_weights, 1)
         if len(self.ori_weights) < len(self.orientations):
+            self.ori_weights = np.append(self.ori_weights, 1)
             self.ori_weights = np.append(self.ori_weights, 1)
 
 
@@ -208,10 +210,10 @@ class PredefinedReward(object):
         orig_feats = self.reward(orig, ret_single_value=False)
         expert_feats = self.reward(expert, ret_single_value=False)
         update = expert_feats - orig_feats
-        print(expert_feats)
-        print(orig_feats)
-        print(np.array2string(update, precision=2))
-        print()
+        # print(expert_feats)
+        # print(orig_feats)
+        # print(np.array2string(update, precision=2))
+        # print()
         if method == "max":
             max_pos_idx = np.argmax(np.fabs(update[0:len(self.pos_weights)]))
             max_ori_idx = np.argmax(np.fabs(update[len(self.ori_weights):]))
@@ -226,9 +228,9 @@ class PredefinedReward(object):
         # weights could be set to negative and optimized incorrectly
         # any non-important features should have 0 weight
         # and only important features have high positive weight
-        # print(self.pos_weights)
-        # print(self.ori_weights)
-        # print()
+        print(self.pos_weights)
+        print(self.ori_weights)
+        print()
         self.pos_weights -= np.min(self.pos_weights)
         self.ori_weights -= np.min(self.ori_weights)
         # self.pos_weights = np.clip(self.pos_weights, 0, np.Inf)

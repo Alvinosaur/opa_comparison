@@ -65,7 +65,7 @@ def view_trained_reward_traj(perturb_path, path):
     inspection_ori_quat_from_perturb = obstacle_ori_quats[perturb_iter]
 
     generated_traj_data = np.load(path, allow_pickle=True)
-    ee_pose_traj = generated_traj_data["traj"]
+    ee_pose_traj = load_pose_as_quat(generated_traj_data["traj"])
     start_pose = load_pose_as_quat(generated_traj_data["start_pose"])
     goal_pose = load_pose_as_quat(generated_traj_data["goal_pose"])
     inspection_pose = load_pose_as_quat(np.hstack([generated_traj_data["obstacle_pose"][:3], np.array([0, 0, 0, 1])]))
@@ -97,12 +97,12 @@ def view_trained_reward_traj(perturb_path, path):
                   ee_pose_traj[t:t + 2, 2], alpha=0.9, color=cm.jet(t / T), linewidth=3)
 
         if t % 3 == 0:
-            # draw_coordinate_frame(ax,
-            #                       T=ee_pose_traj[t, 0:3],
-            #                       R=R.from_quat(ee_pose_traj[t, 3:]).as_matrix())
             draw_coordinate_frame(ax,
                                   T=ee_pose_traj[t, 0:3],
-                                  R=R.from_quat(inspection_pose[3:]).as_matrix())
+                                  R=R.from_quat(ee_pose_traj[t, 3:]).as_matrix())
+            # draw_coordinate_frame(ax,
+            #                       T=ee_pose_traj[t, 0:3],
+            #                       R=R.from_quat(inspection_pose[3:]).as_matrix())
 
     ax.scatter(*start_pose[:3], label="Start")
     ax.scatter(*goal_pose[:3], label="Goal")
@@ -144,4 +144,6 @@ Unified:
 
 Online:
     python3 plot_ee_traj.py --path online_is_expert_True_saved_trials_inspection/eval_perturbs_1_time_60.0/ee_pose_traj_iter_0_rand_trial_0.npz --perturb_path unified_saved_trials_obstacle1/perturb_collection/perturb_traj_iter_0_num_0.npy
+
+    python3 plot_ee_traj.py --path online_is_expert_False_saved_trials_inspection/eval_perturbs_1_time_60.0/ee_pose_traj_iter_0_rand_trial_0.npz --perturb_path unified_saved_trials_obstacle1/perturb_collection/perturb_traj_iter_0_num_0.npy
 """
