@@ -60,8 +60,9 @@ def load_pose_as_quat(pose):
 def view_trained_reward_traj(perturb_path, path):
     ax = plt.axes(projection='3d')
 
-    perturb_iter = int(re.findall(
-        "perturb_traj_iter_(\d+)_num_\d+.npy", perturb_path)[0])
+    # perturb_iter = int(re.findall(
+    #     "perturb_traj_iter_(\d+)_num_\d+.npy", perturb_path)[0])
+    perturb_iter = 0
     inspection_ori_quat_from_perturb = inspection_ori_quats[perturb_iter]
 
     generated_traj_data = np.load(path, allow_pickle=True)
@@ -97,12 +98,12 @@ def view_trained_reward_traj(perturb_path, path):
                   ee_pose_traj[t:t + 2, 2], alpha=0.9, color=cm.jet(t / T), linewidth=3)
 
         if t % 3 == 0:
-            # draw_coordinate_frame(ax,
-            #                       T=ee_pose_traj[t, 0:3],
-            #                       R=R.from_quat(ee_pose_traj[t, 3:]).as_matrix())
             draw_coordinate_frame(ax,
                                   T=ee_pose_traj[t, 0:3],
-                                  R=R.from_euler("XYZ", ee_pose_traj[t, 3:]).as_matrix())
+                                  R=R.from_quat(ee_pose_traj[t, 3:]).as_matrix())
+            # draw_coordinate_frame(ax,
+            #                       T=ee_pose_traj[t, 0:3],
+            #                       R=R.from_euler("XYZ", ee_pose_traj[t, 3:]).as_matrix())
 
     ax.scatter(*start_pose[:3], label="Start")
     ax.scatter(*goal_pose[:3], label="Goal")

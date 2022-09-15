@@ -21,6 +21,8 @@ def calc_regret(traj, human_pose, desired_rot_offset):
     # NOTE: right-multiply rot offset to get relative to human pose
     desired_rot = (R.from_quat(human_pose[3:]) *
                    R.from_quat(desired_rot_offset)).as_quat()
+    import ipdb
+    ipdb.set_trace()
     pos_cost = np.min(np.linalg.norm(
         traj[:, 0:3] - human_pose[np.newaxis, 0:3], axis=-1))
 
@@ -99,6 +101,9 @@ if __name__ == "__main__":
             pos_cost, rot_cost = calc_regret(ee_pose_traj, human_pose=inspection_pose,
                             desired_rot_offset=desired_rot_offset)
 
+            import ipdb
+            ipdb.set_trace()
+
             # each row is all the data from one exp_iter
             pos_costs_iter.append(pos_cost)
             rot_costs_iter.append(rot_cost)
@@ -108,6 +113,7 @@ if __name__ == "__main__":
 
     all_pos_costs = np.array(all_pos_costs)
     all_rot_costs = np.array(all_rot_costs)
+
     np.savez(os.path.join(args.trials_folder, "metrics.npz"),
             all_pos_costs=all_pos_costs,
             all_rot_costs=all_rot_costs)

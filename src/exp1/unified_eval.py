@@ -39,7 +39,7 @@ print("DEVICE: %s" % DEVICE)
 
 # Hyperparameters
 T = 3.0
-TRAJ_LEN = 20  # fixed number of wayponts for trajopt
+TRAJ_LEN = 10  # fixed number of wayponts for trajopt
 waypts_time = np.linspace(0, T, TRAJ_LEN)
 adapt_num_epochs = 5
 
@@ -93,12 +93,10 @@ def parse_arguments():
 def run_adaptation(rm, collected_folder, num_perturbs, max_adaptation_time_sec,
                     save_folder):
     files = os.listdir(collected_folder)
-    exp_iter = None
     all_perturb_pose_traj = []
     for f in files:
         matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
         if len(matches) > 0:
-            exp_iter = int(matches[0])
 
             if len(all_perturb_pose_traj) < num_perturbs:
                 perturb_pose_traj_quat = np.load(os.path.join(
@@ -111,6 +109,7 @@ def run_adaptation(rm, collected_folder, num_perturbs, max_adaptation_time_sec,
 
                 all_perturb_pose_traj.append(perturb_pose_traj_euler)
 
+    exp_iter = 0  # always perturbation at 0th iter setting
     # Set inspection pose
     inspection_pos = inspection_poses[exp_iter]
     inspection_ori_quat = inspection_ori_quats[exp_iter]
@@ -183,9 +182,9 @@ if __name__ == "__main__":
     rm1 = TrainReward(model_dim=(input_dim, 128),
                       epoch=2000, traj_len=TRAJ_LEN, device=DEVICE)
 
-    rm1.load(folder=save_folder, name="unified_model")
-    # run_adaptation(rm1, collected_folder=load_folder, num_perturbs=args.num_perturbs,
-    #                max_adaptation_time_sec=args.max_adaptation_time_sec, save_folder=save_folder)
+    # rm1.load(folder=save_folder, name="unified_model")
+    run_adaptation(rm1, collected_folder=load_folder, num_perturbs=args.num_perturbs,
+                   max_adaptation_time_sec=args.max_adaptation_time_sec, save_folder=save_folder)
     # exit()
 
     it = 0

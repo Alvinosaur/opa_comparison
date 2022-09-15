@@ -63,13 +63,11 @@ def parse_arguments():
 
 def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adaptation_time_sec, save_folder):
     files = os.listdir(collected_folder)
-    exp_iter = None
     all_perturb_pose_traj = []
     for f in files:
         
         matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
         if len(matches) > 0:
-            exp_iter = int(matches[0])
 
             if len(all_perturb_pose_traj) < num_perturbs:
                 print(f)
@@ -80,6 +78,7 @@ def run_adaptation(policy, collected_folder, clip_params, num_perturbs, max_adap
                 break
     print("USING {} perturb trajs".format(len(all_perturb_pose_traj)))
 
+    exp_iter = 0  # always the 0th iter setting is perturbation
     start_pos_world = start_poses[exp_iter]
     start_ori_quat = start_ori_quats[exp_iter]
     start_pose_net = np.concatenate(

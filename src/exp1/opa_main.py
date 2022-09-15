@@ -77,11 +77,8 @@ def run_adaptation(policy, kinova, collected_folder):
     exp_iter = None
     for f in files:
         matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
-        if len(matches) > 0:
-            import ipdb
-            ipdb.set_trace()
-            exp_iter = int(matches[0])
 
+    exp_iter = 0  # always perturbation at 0th iter setting
     kinova.perturb_pose_traj = np.load(os.path.join(
         collected_folder, f"perturb_traj_iter_{exp_iter}_num_0.npy"))
     start_pos_world = start_poses[exp_iter]

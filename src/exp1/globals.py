@@ -112,7 +112,7 @@ inspection_poses = [
     np.array([0.6, 0.2, -0.1]),   # standing at another corner of table
 
     # extreme diff settings
-    np.array([0.5, -0.1, 0.4]),
+    np.array([0.1, -0.1, 0.3]),
     np.array([0.0, 0.0, 0.1]),
     np.array([0.2, 0.15, -0.1]),
 ]

@@ -266,7 +266,6 @@ def run_adaptation(rm: PredefinedReward, save_folder, collected_folder, num_pert
     for f in files:
         matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
         if len(matches) > 0:
-            exp_iter = int(matches[0])
 
             if len(all_perturb_pose_traj) < num_perturbs:
                 perturb_pose_traj_quat = np.load(os.path.join(
@@ -279,6 +278,7 @@ def run_adaptation(rm: PredefinedReward, save_folder, collected_folder, num_pert
 
                 all_perturb_pose_traj.append(perturb_pose_traj_euler)
 
+    exp_iter = 0  # always perturbation at 0th iter setting
     # Set goal pose
     goal_pos = goal_poses[exp_iter]
     goal_ori_quat = goal_ori_quats[exp_iter]
