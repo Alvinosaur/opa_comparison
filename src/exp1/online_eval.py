@@ -156,7 +156,7 @@ class PredefinedReward(object):
                 for rot_offset in self.rot_offsets]
             return [np.arccos(np.clip(np.abs(traj_quat @ rot), 0, 1)).sum() for rot in possible_rots]
             
-    def reward(self, x, ret_single_value=True):
+    def reward(self, x, ret_reward=True):
         assert self.human_pose is not None
         traj = x
         pos_dists = np.array([self.dist(traj, pos) for pos in self.positions])
@@ -165,7 +165,7 @@ class PredefinedReward(object):
         # NOTE: no concept of avoid/attract for ori, only try minimize ori dist or not, so only apply -1
         ori_dists = np.concatenate([self.ori_dist(traj, ori) for ori in self.orientations])
 
-        if ret_single_value:
+        if ret_reward:
             # if self.iter % 50 == 0:
             #     print(self.iter, self.pos_weights @ pos_dists, rot_weight * self.ori_weights @
             # return reward = -1*cost
@@ -174,8 +174,6 @@ class PredefinedReward(object):
         else:
             # formualted as cost minimizattion so postivie
             return +1 * np.concatenate([pos_dists, ori_dists])
-
-        
 
     def set_human_pose(self, human_pose):
         self.human_pose = human_pose
@@ -226,8 +224,8 @@ class PredefinedReward(object):
 
     def update_weights_one_step(self, expert, goal_pose_euler, method):
         orig = self.generate_orig(expert, goal_pose_euler)
-        orig_feats = self.reward(orig, ret_single_value=False)
-        expert_feats = self.reward(expert, ret_single_value=False)
+        orig_feats = self.reward(orig, ret_reward=False)
+        expert_feats = self.reward(expert, ret_reward=False)
         update = expert_feats - orig_feats
         # print(expert_feats)
         # print(orig_feats)
