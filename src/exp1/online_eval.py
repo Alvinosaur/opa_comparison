@@ -159,7 +159,7 @@ class PredefinedReward(object):
     def reward(self, x, ret_single_value=True):
         assert self.human_pose is not None
         traj = x
-        pos_dists = np.array([self.dist(traj, pos) for pos in self.positions])
+        pos_dists = -np.array([self.dist(traj, pos) for pos in self.positions])
         # neg_pos_dists = -pos_dists
 
         # NOTE: no concept of avoid/attract for ori, only try minimize ori dist or not, so only apply -1
