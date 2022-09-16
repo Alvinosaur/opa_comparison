@@ -21,8 +21,6 @@ def calc_regret(traj, human_pose, desired_rot_offset):
     # NOTE: right-multiply rot offset to get relative to human pose
     desired_rot = (R.from_quat(human_pose[3:]) *
                    R.from_quat(desired_rot_offset)).as_quat()
-    import ipdb
-    ipdb.set_trace()
     pos_cost = np.mean(np.linalg.norm(
         traj[:, 0:3] - human_pose[np.newaxis, 0:3], axis=-1))
 

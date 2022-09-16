@@ -132,7 +132,7 @@ class PredefinedReward(object):
             self.num_random_rot = 5
             self.positions = [np.random.normal(loc=0, scale=0.5, size=3)
                                 for _ in range(self.num_random_pos)]
-            self.pos_weights = np.ones(2 * self.num_random_pos)  # + and - dist
+            self.pos_weights = np.ones(self.num_random_pos)  # -dist
 
             self.orientations = [rand_quat()
                                 for _ in range(self.num_random_rot)]
@@ -160,7 +160,7 @@ class PredefinedReward(object):
         assert self.human_pose is not None
         traj = x
         pos_dists = np.array([self.dist(traj, pos) for pos in self.positions])
-        neg_pos_dists = -pos_dists
+        # neg_pos_dists = -pos_dists
 
         # NOTE: no concept of avoid/attract for ori, only try minimize ori dist or not, so only apply -1
         ori_dists = -np.concatenate([self.ori_dist(traj, ori) for ori in self.orientations])
@@ -168,18 +168,19 @@ class PredefinedReward(object):
         if ret_single_value:
             # if self.iter % 50 == 0:
             #     print(self.iter, self.pos_weights @ pos_dists, rot_weight * self.ori_weights @
-            res = 1 * (self.pos_weights @ np.concatenate([pos_dists, neg_pos_dists]) + self.ori_weights @ ori_dists)
+            res = 1 * (self.pos_weights @ np.concatenate([pos_dists]) + self.ori_weights @ ori_dists)
             return res
         else:
-            return +1 * np.concatenate([pos_dists, neg_pos_dists, ori_dists])
+            return +1 * np.concatenate([pos_dists, ori_dists])
+
+        
 
     def set_human_pose(self, human_pose):
         self.human_pose = human_pose
 
         if len(self.positions) == self.num_random_pos:
             self.positions.append(human_pose[0:3])
-            # add new pos weight for +/- dist to human
-            self.pos_weights = np.append(self.pos_weights, 1)
+            # add new pos weight for dist to human
             self.pos_weights = np.append(self.pos_weights, 1)
         else:
             self.positions[-1] = human_pose[0:3]
@@ -239,19 +240,26 @@ class PredefinedReward(object):
         else:
             self.pos_weights -= self.alpha * update[0:len(self.pos_weights)]
             self.ori_weights -= self.alpha * update[len(self.pos_weights):]
-        
+
         # ensure non-negative weights otherwise some non-important 
         # weights could be set to negative and optimized incorrectly
         # any non-important features should have 0 weight
         # and only important features have high positive weight
+        # print()
         # print(self.pos_weights)
         # print(self.ori_weights)
-        # print()
-        # print(self.ori_weights)
-        self.pos_weights -= np.min(self.pos_weights)
+        
+        # print(np.array2string(update[0:len(self.pos_weights)], precision=2))
+        # import ipdb
+        # ipdb.set_trace()
+        print(self.pos_weights)
+       
+        print(self.ori_weights)
+        print()
+        # self.pos_weights -= np.min(self.pos_weights)
         if len(self.ori_weights) > 1:
             self.ori_weights -= np.min(self.ori_weights)
-        # self.pos_weights = np.clip(self.pos_weights, 0, np.Inf)
+        self.pos_weights = np.clip(self.pos_weights, 0, np.Inf)
         # self.ori_weights = np.clip(self.ori_weights, 0, np.Inf)
 
         
