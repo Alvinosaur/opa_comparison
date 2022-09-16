@@ -159,18 +159,20 @@ class PredefinedReward(object):
     def reward(self, x, ret_single_value=True):
         assert self.human_pose is not None
         traj = x
-        pos_dists = -np.array([self.dist(traj, pos) for pos in self.positions])
+        pos_dists = np.array([self.dist(traj, pos) for pos in self.positions])
         # neg_pos_dists = -pos_dists
 
         # NOTE: no concept of avoid/attract for ori, only try minimize ori dist or not, so only apply -1
-        ori_dists = -np.concatenate([self.ori_dist(traj, ori) for ori in self.orientations])
+        ori_dists = np.concatenate([self.ori_dist(traj, ori) for ori in self.orientations])
 
         if ret_single_value:
             # if self.iter % 50 == 0:
             #     print(self.iter, self.pos_weights @ pos_dists, rot_weight * self.ori_weights @
-            res = 1 * (self.pos_weights @ np.concatenate([pos_dists]) + self.ori_weights @ ori_dists)
+            # return reward = -1*cost
+            res = -1 * (self.pos_weights @ np.concatenate([pos_dists]) + self.ori_weights @ ori_dists)
             return res
         else:
+            # formualted as cost minimizattion so postivie
             return +1 * np.concatenate([pos_dists, ori_dists])
 
         
@@ -229,7 +231,7 @@ class PredefinedReward(object):
         update = expert_feats - orig_feats
         # print(expert_feats)
         # print(orig_feats)
-        # print(np.array2string(update, precision=2))
+        # print(np.array2string(update[:6], precision=2))
         # print()
         if method == "max":
             max_pos_idx = np.argmax(np.fabs(update[0:len(self.pos_weights)]))
@@ -257,10 +259,14 @@ class PredefinedReward(object):
         # print(self.ori_weights)
         # print()
         # self.pos_weights -= np.min(self.pos_weights)
-        if len(self.ori_weights) > 1:
-            self.ori_weights -= np.min(self.ori_weights)
+        # if len(self.ori_weights) > 1:
+        #     self.ori_weights -= np.min(self.ori_weights)
+        # self.pos_weights = np.clip(self.pos_weights, 0, np.Inf)
+    #     if not self.is_expert:
+    #         self.pos_weights = np.exp(np.array([-35.59819445, -61.38818335, -24.51782259, -35.46247483,
+    #    -54.03993968, -10.35149632]))
+        self.ori_weights = np.clip(self.ori_weights, 0, np.Inf)
         self.pos_weights = np.clip(self.pos_weights, 0, np.Inf)
-        # self.ori_weights = np.clip(self.ori_weights, 0, np.Inf)
 
         
 # class OracleReward(PredefinedReward):
