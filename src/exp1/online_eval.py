@@ -252,10 +252,10 @@ class PredefinedReward(object):
         # print(np.array2string(update[0:len(self.pos_weights)], precision=2))
         # import ipdb
         # ipdb.set_trace()
-        print(self.pos_weights)
+        # print(self.pos_weights)
        
-        print(self.ori_weights)
-        print()
+        # print(self.ori_weights)
+        # print()
         # self.pos_weights -= np.min(self.pos_weights)
         if len(self.ori_weights) > 1:
             self.ori_weights -= np.min(self.ori_weights)
