@@ -24,7 +24,7 @@ HOME_POSE = np.array([0.373, 0.1, 0.13, 0.707, 0.707, 0, 0])
 HOME_JOINTS = np.array([-0.705, 0.952, -1.663, -1.927, 2.131, 1.252, -0.438])
 POS_DIM = 3
 DROP_OFF_OFFSET = np.array([0.0, 0.0, -0.1])
-goal_radius_scale_custom = 0.45
+goal_radius_scale_custom = 0.6
 
 T = 20.0  # taken from FERL yaml file
 
@@ -57,7 +57,7 @@ start_poses = [
 
     # extreme diff settings
     np.array([0.6, -0.4, 0.1]),
-    np.array([0.6, -0.4, 0.1]),
+    np.array([-1.0, 0.6, -0.4]),
     np.array([-0.6, 0.2, 0.2]),
 
 ]
@@ -91,7 +91,7 @@ goal_poses = [
     np.array([0.4, -0.475, 0.1]),
 
     np.array([0.1, 0.0, 0.7]),
-    np.array([0.1, 0.0, 0.7]),
+    np.array([-1.0, 0.6, 0.5]),
     np.array([0.3, 0.0, -0.4]),
 ]
 goal_ori_quats = start_ori_quats
@@ -115,7 +115,7 @@ inspection_poses = [
 
     # extreme diff settings
     np.array([0.1, -0.1, 0.3]),
-    np.array([0.0, 0.0, 0.1]),
+    np.array([-1.5, 0.6, 0.1]),
     np.array([0.2, 0.15, -0.1]),
 ]
 inspection_ori_quats = [

@@ -237,7 +237,7 @@ if __name__ == "__main__":
     )
 
     assert args.collected_folder is not None
-    CLIP_PARAMS = True
+    CLIP_PARAMS = False
     run_adaptation(policy, collected_folder=args.collected_folder,
                    clip_params=CLIP_PARAMS, num_perturbs=args.num_perturbs,
                    max_adaptation_time_sec=args.max_adaptation_time_sec,

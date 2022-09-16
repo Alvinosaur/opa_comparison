@@ -4,6 +4,8 @@ Copyright (c) 2022 Alvin Shek
 This work is licensed under the terms of the MIT license.
 For a copy, see <https://opensource.org/licenses/MIT>.
 """
+from math import degrees
+from operator import is_
 import numpy as np
 import os
 import argparse
@@ -95,37 +97,46 @@ class PredefinedReward(object):
         self.orientations = []  # quaternions
         self.pos_weights = np.array([])  # to be optimized
         self.ori_weights = np.array([])  # to be optimized
+        self.human_pose = None
+        self.desired_rot_offset = None   # only during expert mode
         self.alpha = 0.001
         self.is_expert = is_expert
         self.iter = 0
-        if self.is_expert:
-            # some random positions of random objects
-            self.positions = [
-                np.array([0.2, 0.35, -0.08]),
-                np.array([0.6, -0.5, 0.1]),
-                np.array([-0.6, 0.2, 0.2]),
-                np.array([0.3, -0.1, 0.1]),
-            ]
-            self.orig_pos_len = len(self.positions)
-            
-            # discrete sampling of some rotations
-            for _ in range(3):
-                self.orientations.append(rand_quat())
-            self.orig_ori_len = len(self.orientations)
+        """
+        Expert: 
+        - only have the human position
+        - only have the exact desired rotation (calculated given human orientation and desired rotational offset)
 
+        Non-Expert:
+        - have positions of human and other objects (5) in the scene
+        - given orientation of human and those other objects with discretized rotational offsets (exact offset is unknown, try to discretely cover the entire space of possible offsets, 30 degrees)
+        
+        Fo
+
+        """
+        
+        self.rot_offsets = []
+        # for rx in range(0, 361, 30):
+        #     for ry in range(0, 361, 30):
+        #         for rz in range(0, 361, 30):
+        #             rot_offset = R.from_euler("XYZ", [rx, ry, rz], degrees=True)
+        #             self.rot_offsets.append(rot_offset)
+        for _ in range(30):
+            self.rot_offsets.append(rand_quat())
+
+        if self.is_expert: 
+            self.num_random_pos = 0
+            self.num_random_rot = 0
         else:
-            # no human pose added
-            num_random = 5
+            self.num_random_pos = 5
+            self.num_random_rot = 5
             self.positions = [np.random.normal(loc=0, scale=0.5, size=3)
-                                for _ in range(num_random)]
-            self.orig_pos_len = len(self.positions)
-            
-            # discrete sampling of some rotations
-            self.orientations = [rand_quat() for _ in range(num_random)]
-            self.orig_ori_len = len(self.orientations)
+                                for _ in range(self.num_random_pos)]
+            self.pos_weights = np.ones(2 * self.num_random_pos)  # + and - dist
 
-        self.pos_weights = np.ones(len(self.positions))
-        self.ori_weights = np.ones(len(self.orientations))
+            self.orientations = [rand_quat()
+                                for _ in range(self.num_random_rot)]
+            self.ori_weights = np.ones(len(self.rot_offsets) * len(self.orientations))
         
 
     def dist(self, traj_euler, pos):
@@ -133,49 +144,64 @@ class PredefinedReward(object):
 
     def ori_dist(self, traj_euler, ori_quat):
         traj_quat = R.from_euler("XYZ", traj_euler[:, 3:]).as_quat()
-        return np.arccos(np.clip(np.abs(traj_quat @ ori_quat), 0, 1)).sum()
-        # ori_euler = R.from_quat(ori_quat).as_euler("XYZ")
-        # return np.linalg.norm(traj_euler[:, 3:] - ori_euler[np.newaxis, :], axis=-1).sum()
+        if self.is_expert:
+            # calculate desired rot give human ori andd ddesired offset
+            desired_rot = (R.from_quat(ori_quat) *
+                   R.from_quat(self.desired_rot_offset)).as_quat()
 
+            return [np.arccos(np.clip(np.abs(traj_quat @ desired_rot), 0, 1)).sum(), ]
+        else:
+            possible_rots = [(R.from_quat(ori_quat) *
+                   R.from_quat(rot_offset)).as_quat()
+                for rot_offset in self.rot_offsets]
+            return [np.arccos(np.clip(np.abs(traj_quat @ rot), 0, 1)).sum() for rot in possible_rots]
+            
     def reward(self, x, ret_single_value=True):
+        assert self.human_pose is not None
         traj = x
         pos_dists = np.array([self.dist(traj, pos) for pos in self.positions])
-        ori_dists = np.array([self.ori_dist(traj, ori) for ori in self.orientations])
-
-        rot_weight = 1.0
-        # self.iter += 1
+        neg_pos_dists = -pos_dists
+        ori_dists = np.concatenate([self.ori_dist(traj, ori) for ori in self.orientations])
 
         if ret_single_value:
             # if self.iter % 50 == 0:
-            #     print(self.iter, self.pos_weights @ pos_dists, rot_weight * self.ori_weights @ ori_dists)
-            res = -1 * (self.pos_weights @ pos_dists + 
-                    rot_weight * self.ori_weights @ ori_dists)
+            #     print(self.iter, self.pos_weights @ pos_dists, rot_weight * self.ori_weights @
+            res = 1 * (self.pos_weights @ np.concatenate([pos_dists, neg_pos_dists]) + self.ori_weights @ ori_dists)
             return res
         else:
-            return +1 * np.concatenate([pos_dists, ori_dists])
+            return +1 * np.concatenate([pos_dists, neg_pos_dists, ori_dists])
 
-    def set_desired_pose(self, human_pos, desired_rot_quat):
-        assert self.is_expert, "Only add human pose in expert mode!"
-        if len(self.positions) == self.orig_pos_len:
-            self.positions.append(human_pos)
-        else:
-            self.positions[-1] = human_pos
+    def set_human_pose(self, human_pose):
+        self.human_pose = human_pose
 
-        if len(self.orientations) == self.orig_ori_len:
-            self.orientations.append(desired_rot_quat)
-        else:
-            self.orientations[-1] = desired_rot_quat
-
-        if len(self.pos_weights) < len(self.positions):
+        if len(self.positions) == self.num_random_pos:
+            self.positions.append(human_pose[0:3])
+            # add new pos weight for +/- dist to human
             self.pos_weights = np.append(self.pos_weights, 1)
-        if len(self.ori_weights) < len(self.orientations):
-            self.ori_weights = np.append(self.ori_weights, 1)
+            self.pos_weights = np.append(self.pos_weights, 1)
+        else:
+            self.positions[-1] = human_pose[0:3]
 
+        if len(self.orientations) == self.num_random_rot:
+            self.orientations.append(human_pose[3:])
+            if self.is_expert:
+                self.ori_weights = np.append(self.ori_weights, 1)
+            else:
+                self.ori_weights = np.append(self.ori_weights, [1] * len(self.rot_offsets))
+        else:
+            self.orientations[-1] = human_pose[3:]
+
+    def set_desired_rot_offset(self, desired_rot_offset):
+        assert self.is_expert
+        self.desired_rot_offset = desired_rot_offset
 
     def generate_orig(self, expert_traj, goal_pose_euler):
         # Set desired pose
-        if self.is_expert:
-            self.set_desired_pose(expert_traj[-1, 0:3], R.from_euler("XYZ", expert_traj[-1, 3:]).as_quat())
+        human_pose_est = np.concatenate([
+            expert_traj[-1, 0:3], 
+            R.from_euler("XYZ", expert_traj[-1, 3:]).as_quat()
+        ])
+        self.set_human_pose(human_pose_est)
 
         # Generate the original trajectories starting from the perturbation pose
         # that will be used to compare with the perturbation trajectories
@@ -188,7 +214,7 @@ class PredefinedReward(object):
                              waypoints=TRAJ_LEN, max_iter=100)
         
         orig_traj = Trajectory(waypts=trajopt.optimize(
-                context=expert_traj[-1], reward_model=self),
+                context=None, reward_model=self),
             waypts_time=waypts_time).waypts
 
         return orig_traj
@@ -225,18 +251,6 @@ class PredefinedReward(object):
         # self.ori_weights = np.clip(self.ori_weights, 0, np.Inf)
 
         
-
-    def load(self, folder, name):
-        data = np.load(os.path.join(folder, name), allow_pickle=True)
-        self.pos_weights = data["pos_weights"]
-        self.ori_weights = data["ori_weights"]
-        
-        # print(self.ori_weights)
-
-    # min_x [ w * dist(x, human) ]
-    # w = inf, 
-
-
 # class OracleReward(PredefinedReward):
 #     def __init__(self):
 #         super().__init__()
@@ -259,7 +273,7 @@ def rand_quat() -> np.ndarray:
                      np.sqrt(u) * np.cos(2 * np.pi * w)])
 
 
-def run_adaptation(rm: PredefinedReward, save_folder, collected_folder, num_perturbs, max_adaptation_time_sec):
+def run_adaptation(rm: PredefinedReward, desired_rot_offset, save_folder, collected_folder, num_perturbs, max_adaptation_time_sec):
     files = os.listdir(collected_folder)
     exp_iter = None
     all_perturb_pose_traj = []
@@ -277,6 +291,7 @@ def run_adaptation(rm: PredefinedReward, save_folder, collected_folder, num_pert
                 ])
 
                 all_perturb_pose_traj.append(perturb_pose_traj_euler)
+    num_perturbs = len(all_perturb_pose_traj)
 
     exp_iter = 0  # always perturbation at 0th iter setting
     # Set goal pose
@@ -291,6 +306,10 @@ def run_adaptation(rm: PredefinedReward, save_folder, collected_folder, num_pert
     inspection_ori_euler = R.from_quat(inspection_ori_quat).as_euler("XYZ")
     inspection_pose_euler = np.concatenate(
         [inspection_pos, inspection_ori_euler])
+    inspection_pose_quat = np.concatenate(
+        [inspection_pos, inspection_ori_quat])
+
+    orig_perturb_traj = np.load(os.path.join(collected_folder, "perturb_traj_iter_0_num_0.npy"))
 
     start_time = time.time()
 
@@ -317,9 +336,9 @@ def run_adaptation(rm: PredefinedReward, save_folder, collected_folder, num_pert
     # all_orig_predicted_pose_traj = np.load("exp1/online_saved_trials_inspection/all_orig_predicted_pose_traj.npy")
     # all_expert_pose_traj = np.load("exp1/online_saved_trials_inspection/all_expert_pose_traj.npy")
 
-    if args.is_expert:
-        rm.set_desired_pose(inspection_pos, R.from_euler("XYZ", 
-                            all_expert_pose_traj[0, 0, 3:]).as_quat())
+    rm.set_human_pose(inspection_pose_quat)
+    if rm.is_expert:
+        rm.set_desired_rot_offset(desired_rot_offset)
 
     # Learn weights
     start_time = time.time()
@@ -380,7 +399,7 @@ if __name__ == "__main__":
     # ipdb.set_trace()
     # rm.set_desired_pose(inspection_pos_from_perturb, inspection_ori_quat_from_perturb)
 
-    run_adaptation(rm, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
+    run_adaptation(rm, desired_rot_offset, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
                    max_adaptation_time_sec=args.max_adaptation_time_sec)
 
     it = 0
@@ -436,13 +455,13 @@ if __name__ == "__main__":
                 inspection_pose_euler[0:3] + rand_pos_noise(),
                 inspection_pose_euler[3:] + rand_rot_euler_noise()
             ])
+            inspection_pose_noisy_quat = np.concatenate([
+                inspection_pose_noisy[0:3],
+                R.from_euler("XYZ", inspection_pose_noisy[3:]).as_quat()
+            ])
 
             # setting human pose
-            if args.is_expert:
-                # NOTE: right-multiply rot offset to get relative to human pose
-                desired_ori_quat = (R.from_euler("XYZ", inspection_pose_noisy[3:]) * R.from_quat(desired_rot_offset)).as_quat()
-                rm.set_desired_pose(
-                    desired_rot_quat=desired_ori_quat, human_pos=inspection_pose_noisy[0:3])
+            rm.set_human_pose(inspection_pose_noisy_quat)
             
             trajopt = TrajOptExp(home=start_pose_noisy,
                                 goal=goal_pose_noisy,
