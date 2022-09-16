@@ -259,7 +259,7 @@ if __name__ == "__main__":
     for exp_iter in range(num_exps):
         print("NEW EXP ", exp_iter)
 
-        for rand_trial in range(10):
+        for rand_trial in range(5):
             # Set start robot pose
             start_pos_world = start_poses[exp_iter] + rand_pos_noise()
             start_ori_quat = R.from_euler("XYZ",

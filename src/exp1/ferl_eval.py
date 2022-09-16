@@ -89,8 +89,8 @@ if __name__ == "__main__":
     ########################################################
     args = parse_arguments()
     argparse_dict = vars(args)
-    ROOT_LOAD_FOLDER = "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection/"
-    ROOT_SAVE_FOLDER = "ferl_saved_trials_inspection_saved_eval"
+    ROOT_LOAD_FOLDER = "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection2/"
+    ROOT_SAVE_FOLDER = ROOT_LOAD_FOLDER
     save_folder = os.path.join(ROOT_SAVE_FOLDER, args.exp_folder)
     os.makedirs(save_folder, exist_ok=True)
 
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     context_dim = 3 + 3
     input_dim = state_dim + context_dim  # robot pose, human pose
     ferl_dnn = DNN(nb_layers=3, nb_units=128, input_dim=12)
-    ferl_dnn.load_state_dict(torch.load(os.path.join(ROOT_LOAD_FOLDER, args.exp_folder, "model_0.pth")))
+    ferl_dnn.load_state_dict(torch.load(os.path.join(args.exp_folder, "model_0.pth")))
     ferl_dnn.to(DEVICE)
 
     it = 0
@@ -109,7 +109,7 @@ if __name__ == "__main__":
     del_pose_tol = 0.005  # over del_pose_interval iterations
     num_exps = len(start_poses)
     # num_exps = 3
-    num_rand_trials = 10
+    num_rand_trials = 5
     pbar = tqdm(total=num_exps * num_rand_trials)
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up

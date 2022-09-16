@@ -91,7 +91,7 @@ if __name__ == "__main__":
     for exp_iter in range(num_exps):
         pos_costs_iter = []
         rot_costs_iter = []
-        for rand_trial in range(10):
+        for rand_trial in range(5):
             ee_pose_traj_data = np.load(os.path.join(
                 args.trials_folder, f"ee_pose_traj_iter_{exp_iter}_rand_trial_{rand_trial}.npz"), allow_pickle=True)
             ee_pose_traj = pose_as_quat(ee_pose_traj_data["traj"])
@@ -99,9 +99,6 @@ if __name__ == "__main__":
 
             pos_cost, rot_cost = calc_regret(ee_pose_traj, human_pose=inspection_pose,
                             desired_rot_offset=desired_rot_offset)
-
-            import ipdb
-            ipdb.set_trace()
 
             # each row is all the data from one exp_iter
             pos_costs_iter.append(pos_cost)

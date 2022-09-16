@@ -14,36 +14,177 @@ def save_tikz_dat_file(fpath, array):
     ])
     np.savetxt(fpath, array)
 
+
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--trials_folder', action='store',
+                        type=str, help="saved trial trajectory folder")
+    args = parser.parse_args()
+
+    return args
+
+args = parse_arguments()
+
 all_data = []
-methods = ["opa", "unified", "ferl", "online(oracle)", "online(missing)"]
-folders = [
-    "opa_saved_trials_inspection/eval_perturbs_1_time_60.0",
-    "unified_saved_trials_inspection/eval_perturbs_10_time_100.0",
-    "ferl_saved_trials_inspection_saved_eval/eval_perturbs_10_time_300.0/",
+methods = ["opa", "unified", "ferl", "online"]
 
-    "online_is_expert_False_saved_trials_inspection/eval_perturbs_10_time_30.0",
-    "online_is_expert_True_saved_trials_inspection/eval_perturbs_10_time_30.0",
+# expertfolders = [
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_True_saved_trials_inspection/eval_perturbs_1_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_True_saved_trials_inspection/eval_perturbs_2_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_True_saved_trials_inspection/eval_perturbs_3_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_True_saved_trials_inspection/eval_perturbs_4_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_True_saved_trials_inspection/eval_perturbs_5_time_120.0",
+# ]
+
+# missingfolders = [
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_False_saved_trials_inspection/eval_perturbs_1_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_False_saved_trials_inspection/eval_perturbs_2_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_False_saved_trials_inspection/eval_perturbs_3_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_False_saved_trials_inspection/eval_perturbs_4_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_False_saved_trials_inspection/eval_perturbs_5_time_120.0",
+# ]
+
+# unifiedfolders = [
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials_inspection/eval_perturbs_1_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials_inspection/eval_perturbs_2_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials_inspection/eval_perturbs_3_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials_inspection/eval_perturbs_4_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials_inspection/eval_perturbs_5_time_120.0",
+# ]
+
+# opafolders = [
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/opa_saved_trials_inspection/eval_perturbs_1_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/opa_saved_trials_inspection/eval_perturbs_2_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/opa_saved_trials_inspection/eval_perturbs_3_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/opa_saved_trials_inspection/eval_perturbs_4_time_120.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/opa_saved_trials_inspection/eval_perturbs_5_time_120.0",
+# ]
+
+# ferlfolders = [
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_final/eval_perturbs_1_time_30.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_final/eval_perturbs_2_time_30.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_final/eval_perturbs_3_time_30.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_final/eval_perturbs_4_time_30.0",
+#     "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_final/eval_perturbs_5_time_30.0",
+# ]
+
+
+
+
+expertfolders = [
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_True_saved_trials_inspection/eval_perturbs_10_time_1.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_True_saved_trials_inspection/eval_perturbs_10_time_10.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_True_saved_trials_inspection/eval_perturbs_10_time_30.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_True_saved_trials_inspection/eval_perturbs_10_time_60.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_True_saved_trials_inspection/eval_perturbs_10_time_120.0",
 ]
-# 1s, 10s, 30s, 60s, 100s, 300s
-# 
-for method, folder in zip(methods, folders):
-    metrics_data = np.load(os.path.join(folder, "metrics.npz"))
-    all_pos_costs = metrics_data["all_pos_costs"]
-    all_rot_costs = metrics_data["all_rot_costs"]
 
-    # get original pos loss avg, std
-    # 0th row is 0th exp_iter where perturb happened
-    orig_pos_loss_avg = np.mean(all_pos_costs[0, :])
-    orig_pos_loss_std = np.std(all_pos_costs[0, :])
-    new_pos_loss_avg = np.mean(all_pos_costs[1:, :])
-    new_pos_loss_std = np.std(all_pos_costs[1:, :])
+missingfolders = [
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_False_saved_trials_inspection/eval_perturbs_10_time_1.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_False_saved_trials_inspection/eval_perturbs_10_time_10.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_False_saved_trials_inspection/eval_perturbs_10_time_30.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_False_saved_trials_inspection/eval_perturbs_10_time_60.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/online_is_expert_False_saved_trials_inspection/eval_perturbs_10_time_120.0",
+]
 
-    orig_rot_loss_avg = np.mean(all_rot_costs[0, :])
-    orig_rot_loss_std = np.std(all_rot_costs[0, :])
-    new_rot_loss_avg = np.mean(all_rot_costs[1:, :])
-    new_rot_loss_std = np.std(all_rot_costs[1:, :])
+unifiedfolders = [
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials_inspection/eval_perturbs_10_time_1.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials_inspection/eval_perturbs_10_time_10.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials_inspection/eval_perturbs_10_time_30.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials_inspection/eval_perturbs_10_time_60.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/unified_saved_trials_inspection/eval_perturbs_10_time_120.0",
+]
 
-    all_data.append([orig_pos_loss_avg, orig_pos_loss_std, new_pos_loss_avg, new_pos_loss_std, orig_rot_loss_avg, orig_rot_loss_std, new_rot_loss_avg, new_rot_loss_std])
+opafolders = [
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/opa_saved_trials_inspection/eval_perturbs_10_time_1.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/opa_saved_trials_inspection/eval_perturbs_10_time_10.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/opa_saved_trials_inspection/eval_perturbs_10_time_30.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/opa_saved_trials_inspection/eval_perturbs_10_time_60.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/opa_saved_trials_inspection/eval_perturbs_10_time_120.0",
+]
+
+ferlfolders = [
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_final/eval_perturbs_10_time_1.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_final/eval_perturbs_10_time_10.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_final/eval_perturbs_10_time_30.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_final/eval_perturbs_10_time_60.0",
+    "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection_final/eval_perturbs_10_time_300.0",
+]
+
+
+# # adaptation time
+# for i in range(len(unifiedfolders)):
+#     expert_metrics_data = np.load(os.path.join(expertfolders[i], "metrics.npz"))
+#     missing_metrics_data = np.load(os.path.join(missingfolders[i], "metrics.npz"))
+#     unified_metrics_data = np.load(os.path.join(unifiedfolders[i], "metrics.npz"))
+#     opa_metrics_data = np.load(os.path.join(opafolders[i], "metrics.npz"))
+#     ferl_metrics_data = np.load(os.path.join(ferlfolders[i], "metrics.npz"))
+
+#     all_data.append([
+#         np.mean(expert_metrics_data["all_pos_costs"][:, :]), 
+#         np.std(expert_metrics_data["all_pos_costs"][:, :]),
+#         np.mean(missing_metrics_data["all_pos_costs"][:, :]), 
+#         np.std(missing_metrics_data["all_pos_costs"][:, :]),
+#         np.mean(opa_metrics_data["all_pos_costs"][:, :]), 
+#         np.std(opa_metrics_data["all_pos_costs"][:, :]),
+#         np.mean(unified_metrics_data["all_pos_costs"][:, :]), 
+#         np.std(unified_metrics_data["all_pos_costs"][:, :]),
+#         np.mean(ferl_metrics_data["all_pos_costs"][:, :]), 
+#         np.std(ferl_metrics_data["all_pos_costs"][:, :]),
+#         ])
+
+# generalization
+expert_metrics_data = np.load(os.path.join(expertfolders[-1], "metrics.npz"))
+missing_metrics_data = np.load(os.path.join(missingfolders[-1], "metrics.npz"))
+unified_metrics_data = np.load(os.path.join(unifiedfolders[-1], "metrics.npz"))
+opa_metrics_data = np.load(os.path.join(opafolders[-1], "metrics.npz"))
+ferl_metrics_data = np.load(os.path.join(ferlfolders[-1], "metrics.npz"))
+
+all_data.append([
+        np.mean(expert_metrics_data["all_pos_costs"][0, :]), 
+        np.std(expert_metrics_data["all_pos_costs"][0, :]),
+        np.mean(expert_metrics_data["all_pos_costs"][1, :]), 
+        np.std(expert_metrics_data["all_pos_costs"][1, :]),
+        np.mean(expert_metrics_data["all_rot_costs"][0, :]), 
+        np.std(expert_metrics_data["all_rot_costs"][0, :]),
+        np.mean(expert_metrics_data["all_rot_costs"][1, :]), 
+        np.std(expert_metrics_data["all_rot_costs"][1, :]),])
+all_data.append([
+        np.mean(missing_metrics_data["all_pos_costs"][0, :]), 
+        np.std(missing_metrics_data["all_pos_costs"][0, :]),
+        np.mean(missing_metrics_data["all_pos_costs"][1, :]), 
+        np.std(missing_metrics_data["all_pos_costs"][1, :]),
+        np.mean(missing_metrics_data["all_rot_costs"][0, :]), 
+        np.std(missing_metrics_data["all_rot_costs"][0, :]),
+        np.mean(missing_metrics_data["all_rot_costs"][1, :]), 
+        np.std(missing_metrics_data["all_rot_costs"][1, :]),])
+all_data.append([
+        np.mean(opa_metrics_data["all_pos_costs"][0, :]), 
+        np.std(opa_metrics_data["all_pos_costs"][0, :]),
+        np.mean(opa_metrics_data["all_pos_costs"][1, :]), 
+        np.std(opa_metrics_data["all_pos_costs"][1, :]),
+        np.mean(opa_metrics_data["all_rot_costs"][0, :]), 
+        np.std(opa_metrics_data["all_rot_costs"][0, :]),
+        np.mean(opa_metrics_data["all_rot_costs"][1, :]), 
+        np.std(opa_metrics_data["all_rot_costs"][1, :]),])
+all_data.append([
+        np.mean(unified_metrics_data["all_pos_costs"][0, :]), 
+        np.std(unified_metrics_data["all_pos_costs"][0, :]),
+        np.mean(unified_metrics_data["all_pos_costs"][1, :]), 
+        np.std(unified_metrics_data["all_pos_costs"][1, :]),
+        np.mean(unified_metrics_data["all_rot_costs"][0, :]), 
+        np.std(unified_metrics_data["all_rot_costs"][0, :]),
+        np.mean(unified_metrics_data["all_rot_costs"][1, :]), 
+        np.std(unified_metrics_data["all_rot_costs"][1, :]),])
+all_data.append([
+        np.mean(ferl_metrics_data["all_pos_costs"][0, :]), 
+        np.std(ferl_metrics_data["all_pos_costs"][0, :]),
+        np.mean(ferl_metrics_data["all_pos_costs"][1, :]), 
+        np.std(ferl_metrics_data["all_pos_costs"][1, :]),
+        np.mean(ferl_metrics_data["all_rot_costs"][0, :]), 
+        np.std(ferl_metrics_data["all_rot_costs"][0, :]),
+        np.mean(ferl_metrics_data["all_rot_costs"][1, :]), 
+        np.std(ferl_metrics_data["all_rot_costs"][1, :]),])
 
 # save to proper tikz format
 

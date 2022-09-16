@@ -430,7 +430,7 @@ if __name__ == "__main__":
     del_pose_tol = 0.005  # over del_pose_interval iterations
     num_exps = len(start_poses)
     # num_exps = 3
-    num_rand_trials = 10
+    num_rand_trials = 5
     pbar = tqdm(total=num_exps * num_rand_trials)
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up

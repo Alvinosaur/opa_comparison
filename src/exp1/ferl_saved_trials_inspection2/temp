@@ -1,0 +1,52 @@
+>>> import nu
+KeyboardInterrupt
+>>> import numpy as np
+>>> a = np.load("/mnt/storage/catkin_ws/src/FERL/src/exp2/ferl_saved_trials_obstacle1/perturb_collection/interaction_datas.npz", allow_pickle=True)
+>>> np.save("/mnt/storage/catkin_ws/src/FERL/src/exp2/ferl_saved_trials_inspection/perturb_collection/perturb_traj_iter_0_num_0.npy",  a["interaction_pose_traj"])
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/usr/local/lib/python2.7/dist-packages/numpy/lib/npyio.py", line 524, in save
+    fid = open(file, "wb")
+IOError: [Errno 2] No such file or directory: '/mnt/storage/catkin_ws/src/FERL/src/exp2/ferl_saved_trials_inspection/perturb_collection/perturb_traj_iter_0_num_0.npy'
+>>> np.save("/mnt/storage/catkin_ws/src/FERL/src/exp2/ferl_saved_trials_obstacle1/perturb_collection/perturb_traj_iter_0_num_0.npy",  a["interaction_pose_traj"])
+>>> a = np.load("/mnt/storage/catkin_ws/src/FERL/src/exp2/ferl_saved_trials_obstacle2/perturb_collection/interaction_datas.npz", allow_pickle=True)
+>>> np.save("/mnt/storage/catkin_ws/src/FERL/src/exp2/ferl_saved_trials_obstacle2/perturb_collection/perturb_traj_iter_0_num_0.npy",  a["interaction_pose_traj"])
+>>> quit()
+ubuntu@icl-host:/mnt/storage/catkin_ws/src/FERL/src/exp1$ python
+Python 2.7.6 (default, Nov 13 2018, 12:45:42)
+[GCC 4.8.4] on linux2
+Type "help", "copyright", "credits" or "license" for more information.
+>>> impport torch
+  File "<stdin>", line 1
+    impport torch
+                ^
+SyntaxError: invalid syntax
+>>> import torch
+i>>> import numpy as np
+>>> from utils.networks import DNN
+>>> net = DNN(nb_layers=3, nb_units=128)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+TypeError: __init__() takes exactly 4 arguments (3 given)
+>>> net = DNN(nb_layers=3, nb_units=128, input_dim=12)
+>>> net.load_state_dict(torch.load("/mnt/storage/catkin_ws/src/FERL/src/exp1/ferl_saved_trials_inspection/eval_perturbs_10_time_300.0/model_0.pth"))
+<All keys matched successfully>
+>>> traj = np.load("/mnt/storage/catkin_ws/src/FERL/src/exp1/ferl_saved_trials_inspection/perturb_collection/perturb_traj_iter_0_num_0.npy", allow_pickle=Truue)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+NameError: name 'Truue' is not defined
+>>> traj = np.load("/mnt/storage/catkin_ws/src/FERL/src/exp1/ferl_saved_trials_inspection/perturb_collection/perturb_traj_iter_0_num_0.npy", allow_pickle=True)
+>>> traj_euler = np.conc
+KeyboardInterrupt
+>>> from scipy.spatial.transform import Rotation as R
+>>> traj_euler = np.concatenate([traj[:,:3], R.from_euler("XYZ", traj[:,3:]).as_quat()], axis=-1)
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/usr/local/lib/python2.7/dist-packages/scipy/spatial/transform/rotation.py", line 827, in from_euler
+    raise ValueError("Expected `angles` to be at most "
+AttributeError: 'exceptions.ValueError' object has no attribute 'format'
+>>> traj_euler = np.concatenate([traj[:,:3], R.from_euler("XYZ", traj[:,3:]).as_quat()], axis=-1)
+KeyboardInterrupt
+>>> traj.shape
+(481, 7)
+>>>
