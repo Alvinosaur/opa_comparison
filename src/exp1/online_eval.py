@@ -149,12 +149,12 @@ class PredefinedReward(object):
             desired_rot = (R.from_quat(ori_quat) *
                    R.from_quat(self.desired_rot_offset)).as_quat()
 
-            return [np.arccos(np.clip(np.abs(traj_quat @ desired_rot), 0, 1)).sum(), ]
+            return [np.arccos(np.clip(np.abs(traj_quat @ desired_rot), 0, 1)).mean(), ]
         else:
             possible_rots = [(R.from_quat(ori_quat) *
                    R.from_quat(rot_offset)).as_quat()
                 for rot_offset in self.rot_offsets]
-            return [np.arccos(np.clip(np.abs(traj_quat @ rot), 0, 1)).sum() for rot in possible_rots]
+            return [np.arccos(np.clip(np.abs(traj_quat @ rot), 0, 1)).mean() for rot in possible_rots]
             
     def reward(self, x, ret_reward=True):
         assert self.human_pose is not None
@@ -199,13 +199,6 @@ class PredefinedReward(object):
         self.desired_rot_offset = desired_rot_offset
 
     def generate_orig(self, expert_traj, goal_pose_euler):
-        # Set desired pose
-        human_pose_est = np.concatenate([
-            expert_traj[-1, 0:3], 
-            R.from_euler("XYZ", expert_traj[-1, 3:]).as_quat()
-        ])
-        self.set_human_pose(human_pose_est)
-
         # Generate the original trajectories starting from the perturbation pose
         # that will be used to compare with the perturbation trajectories
         initial_pose = expert_traj[0]
@@ -227,6 +220,10 @@ class PredefinedReward(object):
         orig_feats = self.reward(orig, ret_reward=False)
         expert_feats = self.reward(expert, ret_reward=False)
         update = expert_feats - orig_feats
+        # print(expert_feats, orig_feats)
+        # import ipdb
+        # ipdb.set_trace()
+
         # print(expert_feats)
         # print(orig_feats)
         # print(np.array2string(update[:6], precision=2))
@@ -263,6 +260,7 @@ class PredefinedReward(object):
     #     if not self.is_expert:
     #         self.pos_weights = np.exp(np.array([-35.59819445, -61.38818335, -24.51782259, -35.46247483,
     #    -54.03993968, -10.35149632]))
+        # print(self.ori_weights)
         self.ori_weights = np.clip(self.ori_weights, 0, np.Inf)
         self.pos_weights = np.clip(self.pos_weights, 0, np.Inf)
 
@@ -293,20 +291,30 @@ def run_adaptation(rm: PredefinedReward, desired_rot_offset, save_folder, collec
     files = os.listdir(collected_folder)
     exp_iter = None
     all_perturb_pose_traj = []
-    for f in files:
-        matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
-        if len(matches) > 0:
+    if num_perturbs == 1:
+        perturb_pose_traj_quat = np.load(os.path.join(
+                        collected_folder, "perturb_traj_iter_0_num_0.npy"))
+        perturb_pose_traj_euler = np.hstack([
+                        perturb_pose_traj_quat[:, 0:3],
+                        R.from_quat(perturb_pose_traj_quat[:, 3:]).as_euler("XYZ")
+                    ])
 
-            if len(all_perturb_pose_traj) < num_perturbs:
-                perturb_pose_traj_quat = np.load(os.path.join(
-                    collected_folder, f))
+        all_perturb_pose_traj.append(perturb_pose_traj_euler)
+    else:
+        for f in files:
+            matches = re.findall("perturb_traj_iter_(\d+)_num_\d+.npy", f)
+            if len(matches) > 0:
 
-                perturb_pose_traj_euler = np.hstack([
-                    perturb_pose_traj_quat[:, 0:3],
-                    R.from_quat(perturb_pose_traj_quat[:, 3:]).as_euler("XYZ")
-                ])
+                if len(all_perturb_pose_traj) < num_perturbs:
+                    perturb_pose_traj_quat = np.load(os.path.join(
+                        collected_folder, f))
 
-                all_perturb_pose_traj.append(perturb_pose_traj_euler)
+                    perturb_pose_traj_euler = np.hstack([
+                        perturb_pose_traj_quat[:, 0:3],
+                        R.from_quat(perturb_pose_traj_quat[:, 3:]).as_euler("XYZ")
+                    ])
+
+                    all_perturb_pose_traj.append(perturb_pose_traj_euler)
     num_perturbs = len(all_perturb_pose_traj)
 
     exp_iter = 0  # always perturbation at 0th iter setting
@@ -324,8 +332,6 @@ def run_adaptation(rm: PredefinedReward, desired_rot_offset, save_folder, collec
         [inspection_pos, inspection_ori_euler])
     inspection_pose_quat = np.concatenate(
         [inspection_pos, inspection_ori_quat])
-
-    orig_perturb_traj = np.load(os.path.join(collected_folder, "perturb_traj_iter_0_num_0.npy"))
 
     start_time = time.time()
 
@@ -484,7 +490,7 @@ if __name__ == "__main__":
                                 human_pose_euler=inspection_pose_noisy,
                                 context_dim=context_dim,
                                 use_state_features=False,
-                                waypoints=TRAJ_LEN)
+                                waypoints=TRAJ_LEN, max_iter=300)
             traj = Trajectory(
                 waypts=trajopt.optimize(
                     context=inspection_pose_noisy, reward_model=rm),
