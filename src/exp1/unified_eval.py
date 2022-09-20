@@ -30,6 +30,7 @@ signal.signal(signal.SIGINT, sigint_handler)
 World2Net = 10.0
 Net2World = 1 / World2Net
 
+RANDOMIZE = False
 DEBUG = True
 dstep = 0.05
 ros_delay = 0.1
@@ -226,9 +227,15 @@ if __name__ == "__main__":
         for rand_trial in range(10):
             # add small random noise to start/goal/objects
             def rand_pos_noise():
-                return np.random.normal(loc=0, scale=0.05, size=3)
+                if RANDOMIZE:
+                    return np.random.normal(loc=0, scale=0.05, size=3)
+                else:
+                    return np.zeros(3)
             def rand_rot_euler_noise():
-                return np.random.normal(loc=0, scale=5 * np.pi / 180, size=3)
+                if RANDOMIZE:
+                    return np.random.normal(loc=0, scale=5 * np.pi / 180, size=3)
+                else:
+                    return np.zeros(3)
             start_pose_noisy = np.concatenate([
                 start_pose[0:3] + rand_pos_noise(),
                 start_pose[3:] + rand_rot_euler_noise()

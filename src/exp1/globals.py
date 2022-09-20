@@ -50,6 +50,9 @@ extra_masses = [
 
 # Item pickup poses
 start_poses = [
+    # (sim 1)
+    np.array([0.273, 0.01, -0.149]),
+
     # 1st: human perturbation
     np.array([0.2, 0.35, -0.08]),
     np.array([0.2, 0.35, -0.08]),
@@ -62,6 +65,9 @@ start_poses = [
 
 ]
 start_ori_quats = [
+    # (sim 1)
+    np.array([0, 1., 0, 0]),
+
     np.array([0, 1., 0, 0]),
     np.array([0, 1., 0, 0]),
     np.array([0, 1., 0, 0]),
@@ -72,6 +78,9 @@ start_ori_quats = [
     np.array([0.54350796, -0.02228003, -0.83859095, -0.02946044]),
 ]
 start_joints_all = [
+    # (sim 1)
+    np.array([4, 70, 174, 228, 350.637, 20, 99]),
+
     np.array([270.271, 68.32, 221.0, 241.136, 91.637, 36.716, 18.348]),
     np.array([270.271, 68.32, 221.0, 241.136, 91.637, 36.716, 18.348]),
     np.array([270.271, 68.32, 221.0, 241.136, 91.637, 36.716, 18.348]),
@@ -86,6 +95,9 @@ start_joints_all = [
 
 # Item dropoff poses
 goal_poses = [
+    # (sim 1)
+    np.array([0.751, -0.002, -0.025]),
+
     np.array([0.4, -0.475, 0.1]),
     np.array([0.4, -0.475, 0.1]),
     np.array([0.4, -0.475, 0.1]),
@@ -96,6 +108,9 @@ goal_poses = [
 ]
 goal_ori_quats = start_ori_quats
 goal_joints_all = [
+    # (sim 1)
+    np.array([0, 89, 171, 331, 13, 306, 82]),
+
     np.array([20, 67.329, 249.304, 289.5, 117.57, 80.329, 92.4]),
     np.array([20, 67.329, 249.304, 289.5, 117.57, 80.329, 92.4]),
     np.array([20, 67.329, 249.304, 289.5, 117.57, 80.329, 92.4]),
@@ -109,6 +124,9 @@ goal_joints_all = [
 ]
 
 inspection_poses = [
+    # (sim obstacle 1)
+    np.array([0.45, 0.022, -0.144]),
+
     np.array([0.6, 0.1, 0.05]),  # sitting at center of table
     np.array([0.6, -0.2, 0.4]),   # standing at one corner of table
     np.array([0.6, 0.2, -0.1]),   # standing at another corner of table
@@ -128,3 +146,12 @@ inspection_ori_quats = [
     np.array([0.31430839, -0.61724114, 0.12140935, 0.71097354]),
     np.array([-0.14625042, -0.56405624, -0.60235748, -0.5455427]),
 ]
+
+# start_poses = start_poses[1:]
+# start_ori_quats = start_ori_quats[1:]
+# start_joints_all = start_joints_all[1:]
+# goal_poses = goal_poses[1:]
+# goal_joints_all = goal_joints_all[1:]
+# goal_ori_quats = goal_ori_quats[1:]
+# inspection_poses = inspection_poses[1:]
+# inspection_ori_quats = inspection_ori_quats[1:]

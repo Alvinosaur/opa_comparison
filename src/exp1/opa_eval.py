@@ -31,6 +31,7 @@ World2Net = 10.0
 Net2World = 1 / World2Net
 
 DEBUG = True
+RANDOMIZE = False
 dstep = 0.05
 ros_delay = 0.1
 
@@ -252,9 +253,15 @@ if __name__ == "__main__":
     # num_exps = 3
 
     def rand_pos_noise():
-        return np.random.normal(loc=0, scale=0.05, size=3)
+        if RANDOMIZE:
+            return np.random.normal(loc=0, scale=0.05, size=3)
+        else:
+            return np.zeros(3)
     def rand_rot_euler_noise():
-        return np.random.normal(loc=0, scale=5 * np.pi / 180, size=3)
+        if RANDOMIZE:
+            return np.random.normal(loc=0, scale=5 * np.pi / 180, size=3)
+        else:
+            return np.zeros(3)
 
     for exp_iter in range(num_exps):
         print("NEW EXP ", exp_iter)

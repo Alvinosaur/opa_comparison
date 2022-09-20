@@ -269,7 +269,7 @@ if __name__ == "__main__":
     # box3 (pretend, need to buy) add new obstacles show online repulsion from them,
     # box4 watch final behavior
     # can1 intervene rot finish, can2 watch, can3 stand up and watch
-    kinova.command_kinova_gripper(cmd_open=True)
+    # kinova.command_kinova_gripper(cmd_open=True)
     num_exps = len(start_poses)
     num_exps = 10
     for exp_iter in range(num_exps):
@@ -372,6 +372,7 @@ if __name__ == "__main__":
                           object_poses_net[np.newaxis].repeat(T, axis=0),
                           object_radii[np.newaxis].repeat(T, axis=0),
                           object_idxs)
+                exit()
                 processed_sample = process_single_full_traj(sample)
 
                 # For analysis, save weights before update
