@@ -3,10 +3,21 @@ import torch
 import time
 from scipy.optimize import minimize
 from scipy.optimize import LinearConstraint, NonlinearConstraint
+import argparse
+import copy
 
+from globals import *
+
+################## @Bo: Parameters to tune ######################
+"""
+I tuned these parameters by first looking at 1. how closely the  new traj matches the original and 2. how smooth it is. If the new traj doesn't match at all (ie: just lin interpolates straight  to goal), it's a sign that the max abs translation param is too low because new traj can't physically stay that close to the original traj while still reaching the goal. So you would need to increase it.
+If traj is good but noisy, try either increasing the smoothness weight or redducing the max abs trans.
+"""
+max_abs_translation_btwn_two_pts = 0.05
+max_abs_rotation_quat_btwn_two_pts = 0.8  # this may need tuning, not easy  for me to tell with plot_ee_Traj
+smoothness_weight = 0.3
 
 class TrajOpt(object):
-
     def __init__(self, home, goal, orig_traj, max_iter=1000, eps=1e-3, ftol=1e-6):
         self.home = home
         self.goal = goal
@@ -46,12 +57,17 @@ class TrajOpt(object):
 
         # constrain max change between waypoints
         self.pos_action_con = NonlinearConstraint(
-            self.pos_action_con_func, -0.2, 0.2)
+            self.pos_action_con_func, 
+            -max_abs_translation_btwn_two_pts, 
+            max_abs_translation_btwn_two_pts)
         self.rot_action_con = NonlinearConstraint(
-            self.rot_action_con_func, -0.8, 0.8)
+            self.rot_action_con_func, 
+            -max_abs_rotation_quat_btwn_two_pts, 
+            max_abs_rotation_quat_btwn_two_pts)
 
-        self.constraints = {self.start_con, self.goal_con,
-                            self.pos_action_con, self.rot_action_con}
+        self.constraints = {self.start_con, self.goal_con}
+        self.constraints.add(self.pos_action_con)
+        self.constraints.add(self.rot_action_con)
 
     def pos_action_con_func(self, xi):
         xi = xi.reshape(self.n_waypoints, self.state_dim)
@@ -66,7 +82,9 @@ class TrajOpt(object):
     # trajectory cost function
     def trajcost(self, xi):
         xi = xi.reshape(self.n_waypoints, self.state_dim)
-        return np.linalg.norm(xi[1:-1, :] - self.orig_traj[1:-1, :])
+        error = np.linalg.norm(xi[1:-1, :] - self.orig_traj[1:-1, :], axis=-1)
+        smoothness = smoothness_weight * np.linalg.norm(xi[1:, :] - xi[0:-1, :], axis=-1).mean()
+        return np.max(error) + smoothness
 
     # run the optimizer
     def optimize(self, method='SLSQP'):
@@ -78,3 +96,26 @@ class TrajOpt(object):
 
         xi = res.x.reshape(self.n_waypoints, self.state_dim)
         return xi
+
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--saved_traj_path', action='store',
+                        type=str)
+    args = parser.parse_args()
+
+    return args
+
+if __name__ == "__main__":
+    args = parse_arguments()
+
+    saved_traj_data = dict(np.load(args.saved_traj_path))
+    saved_traj = saved_traj_data["traj"]
+    goal_pose_quat = saved_traj_data["goal_pose"]
+    start_pose_quat = saved_traj_data["start_pose"]
+
+    new_traj = TrajOpt(home=start_pose_quat, goal=goal_pose_quat, orig_traj=saved_traj).optimize()
+
+    saved_traj_data["traj"] = new_traj
+
+    np.savez(args.saved_traj_path + "_CONSTRAINED.npz", **saved_traj_data)
+
