@@ -49,7 +49,7 @@ class TrajOptExp(TrajOptBase):
     # experiment-specific oracle reward function used to generate "optimal"
     # human behavior
     POS_WEIGHT = 1.0
-    ROT_WEIGHT = 0.75
+    ROT_WEIGHT = 1.0
 
     def __init__(self, human_pose_euler, context_dim, *args, **kwargs):
         super(TrajOptExp, self).__init__(*args, **kwargs)
@@ -195,7 +195,7 @@ if __name__ == "__main__":
     del_pose_tol = 0.005  # over del_pose_interval iterations
     num_exps = len(start_poses)
     # num_exps = 3
-    num_rand_trials = 5
+    num_rand_trials = 1
     pbar = tqdm(total=num_exps*num_rand_trials)
     for exp_iter in range(num_exps):
         # set extra mass of object to pick up

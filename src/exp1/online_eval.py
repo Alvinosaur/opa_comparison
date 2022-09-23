@@ -170,7 +170,10 @@ class PredefinedReward(object):
             # if self.iter % 50 == 0:
             #     print(self.iter, self.pos_weights @ pos_dists, rot_weight * self.ori_weights @
             # return reward = -1*cost
+            # import ipdb
+            # ipdb.set_trace()
             res = -1 * (self.pos_weights @ np.concatenate([pos_dists]) + self.ori_weights @ ori_dists)
+            # print(self.ori_weights @ ori_dists)
             return res
         else:
             # formualted as cost minimizattion so postivie
@@ -181,19 +184,24 @@ class PredefinedReward(object):
 
         if len(self.positions) == self.num_random_pos:
             self.positions.append(human_pose[0:3])
-            # add new pos weight for dist to human
-            self.pos_weights = np.append(self.pos_weights, 1)
         else:
             self.positions[-1] = human_pose[0:3]
 
+        # add new pos weight for dist to human
+        if len(self.pos_weights) == self.num_random_pos:
+            self.pos_weights = np.append(self.pos_weights, 1)
+
         if len(self.orientations) == self.num_random_rot:
             self.orientations.append(human_pose[3:])
+        else:
+            self.orientations[-1] = human_pose[3:]
+
+        if len(self.ori_weights) == self.num_random_rot:
             if self.is_expert:
                 self.ori_weights = np.append(self.ori_weights, 1)
             else:
                 self.ori_weights = np.append(self.ori_weights, [1] * len(self.rot_offsets))
-        else:
-            self.orientations[-1] = human_pose[3:]
+
 
     def set_desired_rot_offset(self, desired_rot_offset):
         assert self.is_expert
@@ -244,8 +252,7 @@ class PredefinedReward(object):
         # any non-important features should have 0 weight
         # and only important features have high positive weight
         # print()
-        # print(self.pos_weights)
-        # print(self.ori_weights)
+        # print(self.pos_weights, self.ori_weights)
         
         # print(np.array2string(update[0:len(self.pos_weights)], precision=2))
         # import ipdb
@@ -376,6 +383,8 @@ def run_adaptation(rm: PredefinedReward, desired_rot_offset, save_folder, collec
         expert=all_expert_pose_traj[rand_idx], method="...",
         goal_pose_euler=goal_pose_euler)
         
+    # import ipdb
+    # ipdb.set_trace()
     np.savez(os.path.join(save_folder, "online_weights.npz"),
         pos_weights=rm.pos_weights,
         ori_weights=rm.ori_weights
@@ -416,7 +425,7 @@ if __name__ == "__main__":
         R.from_quat(inspection_ori_quat_from_perturb).inv() *
         R.from_quat(orig_perturb_traj[-1, 3:])).as_quat()
 
-    # rm.load(folder=save_folder, name="online_weights.npz")
+    
     # # desired rot is just the perturb ori initially
     # import ipdb
     # ipdb.set_trace()
@@ -424,6 +433,11 @@ if __name__ == "__main__":
 
     run_adaptation(rm, desired_rot_offset, save_folder, collected_folder=load_folder, num_perturbs=args.num_perturbs,
                    max_adaptation_time_sec=args.max_adaptation_time_sec)
+                   
+    # rm.set_desired_rot_offset(desired_rot_offset)
+    # weights = np.load(os.path.join(save_folder, "online_weights.npz"), allow_pickle=True)
+    # rm.pos_weights=weights["pos_weights"]
+    # rm.ori_weights=weights["ori_weights"]
 
     it = 0
     pose_error_tol = 0.1
@@ -497,7 +511,7 @@ if __name__ == "__main__":
                                 human_pose_euler=inspection_pose_noisy,
                                 context_dim=context_dim,
                                 use_state_features=False,
-                                waypoints=TRAJ_LEN, max_iter=300)
+                                waypoints=TRAJ_LEN, max_iter=1000)
             traj = Trajectory(
                 waypts=trajopt.optimize(
                     context=inspection_pose_noisy, reward_model=rm),

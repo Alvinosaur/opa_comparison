@@ -5,17 +5,18 @@ from scipy.optimize import minimize
 from scipy.optimize import LinearConstraint, NonlinearConstraint
 import argparse
 import copy
-
 from globals import *
+add_paths()  # sets the paths for the below imports
 
+from trajectory import Trajectory
 ################## @Bo: Parameters to tune ######################
 """
 I tuned these parameters by first looking at 1. how closely the  new traj matches the original and 2. how smooth it is. If the new traj doesn't match at all (ie: just lin interpolates straight  to goal), it's a sign that the max abs translation param is too low because new traj can't physically stay that close to the original traj while still reaching the goal. So you would need to increase it.
 If traj is good but noisy, try either increasing the smoothness weight or redducing the max abs trans.
 """
-max_abs_translation_btwn_two_pts = 0.05
+max_abs_translation_btwn_two_pts = 0.3
 max_abs_rotation_quat_btwn_two_pts = 0.8  # this may need tuning, not easy  for me to tell with plot_ee_Traj
-smoothness_weight = 0.3
+smoothness_weight = 0.1
 
 class TrajOpt(object):
     def __init__(self, home, goal, orig_traj, max_iter=1000, eps=1e-3, ftol=1e-6):
@@ -84,6 +85,8 @@ class TrajOpt(object):
         xi = xi.reshape(self.n_waypoints, self.state_dim)
         error = np.linalg.norm(xi[1:-1, :] - self.orig_traj[1:-1, :], axis=-1)
         smoothness = smoothness_weight * np.linalg.norm(xi[1:, :] - xi[0:-1, :], axis=-1).mean()
+        # print("Max error @ ", np.argmax(error))
+        # print(len(xi))
         return np.max(error) + smoothness
 
     # run the optimizer
@@ -114,6 +117,9 @@ if __name__ == "__main__":
     start_pose_quat = saved_traj_data["start_pose"]
 
     new_traj = TrajOpt(home=start_pose_quat, goal=goal_pose_quat, orig_traj=saved_traj).optimize()
+    # new_traj = Trajectory(
+    #         waypts=new_traj,
+    #         waypts_time=np.linspace(0, len(new_traj), len(new_traj))).downsample(num_waypts=20).waypts
 
     saved_traj_data["traj"] = new_traj
 

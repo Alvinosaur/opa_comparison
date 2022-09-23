@@ -90,8 +90,8 @@ if __name__ == "__main__":
     ########################################################
     args = parse_arguments()
     argparse_dict = vars(args)
-    ROOT_LOAD_FOLDER = "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection2/"
-    ROOT_SAVE_FOLDER = ROOT_LOAD_FOLDER
+    # ROOT_LOAD_FOLDER = "/home/ruic/Documents/opa/opa_comparison/src/exp1/ferl_saved_trials_inspection2/"
+    ROOT_SAVE_FOLDER = ""
     save_folder = os.path.join(ROOT_SAVE_FOLDER, args.exp_folder)
     os.makedirs(save_folder, exist_ok=True)
 

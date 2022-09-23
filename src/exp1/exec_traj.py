@@ -159,7 +159,7 @@ def reach_start_joints(viz_3D_publisher, target_joints, joint_error_tol=0.1, dpo
 
 
 def reach_start_pos(pose_pub, start_pose, goal_pose,
-                    pose_tol=0.03, dpose_tol=1e-2, reaching_dstep=0.1, clip_movement=False):
+                    pose_tol=0.03, dpose_tol=1e-2, reaching_dstep=0.02, clip_movement=False):
     global cur_pos_world, cur_ori_quat, cur_joints
 
     if DEBUG:
@@ -234,12 +234,19 @@ if __name__ == "__main__":
 
     perturb_iter = 0
     exp_iter = int(re.findall("ee_pose_traj_iter_(\d+)\S+", args.saved_traj_path)[0])
-    saved_traj = np.load(args.saved_traj_path)
+    traj_data = np.load(args.saved_traj_path)
     goal_pose_quat = goal_poses[exp_iter]
     start_pose_quat = start_poses[exp_iter]
+    start_pose_world = traj_data['start_pose']
+    if start_pose_world.shape[0] == 6:
+        start_pose_world = np.hstack([start_pose_world[:3], R.from_euler("XYZ", start_pose_world[3:]).as_quat()])
+    if traj_data['traj'].shape[1] == 6:
+        saved_traj = np.hstack([traj_data['traj'][:,:3], R.from_euler("XYZ", traj_data['traj'][:,3:]).as_quat()])
+    else:
+        saved_traj = traj_data['traj']
 
     prev_pose_quat = None
-    pose_error_tol = 0.1
+    pose_error_tol = 0.2
     max_pose_error_tol = 0.2  # too far to be considered converged and not moving
     del_pose_tol = 0.005  # over del_pose_interval iterations
     step = 0
@@ -249,62 +256,65 @@ if __name__ == "__main__":
     start_t = time.time()
 
     # move to start
-    reach_start_()
+    if not DEBUG:
+        kinova.reach_joints(HOME_JOINTS)
 
-    for ee_pose in saved_traj:
-        ee_pose = load_pose_as_quat(ee_pose)
+    perform_grasp(start_pose_world, item_ids[0], kinova)
+
+    for step in range(len(saved_traj)):
+        print("STEP: ", step)
+        local_target_pose = load_pose_as_quat(saved_traj[step])
+
+        pose_error = 1e10
+        del_pose = 1e10
+
+        prev_pose_world = None
+        max_inner_steps = 5
+        inner_step = 0
+        while (not rospy.is_shutdown() and pose_error > pose_error_tol and
+                inner_step < max_inner_steps):
         
-        # calculate next action to take based on planned traj
-        cur_pose_quat = np.concatenate(
-            [kinova.cur_pos, kinova.cur_ori_quat])
-        cur_pose = np.concatenate([kinova.cur_pos,
-                                    R.from_quat(kinova.cur_ori_quat).as_euler("XYZ")])
-        pose_error = calc_pose_error(
-            goal_pose_quat, cur_pose_quat, rot_scale=0)
-        if prev_pose_quat is not None:
-            del_pose = calc_pose_error(prev_pose_quat, cur_pose_quat)
-            # del_pose_running_avg.update(del_pose)
+            # calculate next action to take based on planned traj
+            cur_pose_quat = np.concatenate(
+                [kinova.cur_pos, kinova.cur_ori_quat])
+            cur_pose = np.concatenate([kinova.cur_pos,
+                                        R.from_quat(kinova.cur_ori_quat).as_euler("XYZ")])
+            pose_error = calc_pose_error(
+                local_target_pose, cur_pose_quat, rot_scale=0)
+            print("Local pose error: ", pose_error)
 
-        if step % 2 == 0:
-            print("new target", step)
             # calculate new action
-            override_pred_delay = False
-            local_target_pose = saved_traj[step]
             local_target_pos = local_target_pose[0:3]
-            local_target_ori_quat = R.from_euler(
-                "XYZ", local_target_pose[3:]).as_quat()
+            local_target_ori_quat = local_target_pose[3:]
 
-        # TODO: are these necessary, or can we move this into
-        # traj opt with constraints and cost
-        # Apply low-pass filter to smooth out policy's sudden changes in orientation
-        interp_rot = interpolate_rotations(
-            start_quat=kinova.cur_ori_quat, stop_quat=local_target_ori_quat, alpha=0.7)
+            # TODO: are these necessary, or can we move this into
+            # traj opt with constraints and cost
+            # Apply low-pass filter to smooth out policy's sudden changes in orientation
+            interp_rot = interpolate_rotations(
+                start_quat=kinova.cur_ori_quat, stop_quat=local_target_ori_quat, alpha=0.7)
 
-        # Clip target EE position to bounds
-        local_target_pos = np.clip(
-            local_target_pos, a_min=kinova.ee_min_pos, a_max=kinova.ee_max_pos)
+            # # Clip target EE position to bounds
+            # local_target_pos = np.clip(
+            #     local_target_pos, a_min=kinova.ee_min_pos, a_max=kinova.ee_max_pos)
+            # local_target_pos_clipped = np.clip(
+            #     local_target_pos, a_min=kinova.ee_min_pos, a_max=kinova.ee_max_pos)
+            # if (local_target_pos != local_target_pos_clipped).any():
+            #     inner_step += 1
+            #     continue
 
-        # Publish target pose
-        if not DEBUG:
-            target_pose = np.concatenate(
-                [local_target_pos, interp_rot])
-            kinova.pose_pub.publish(pose_to_msg(
-                target_pose, frame=ROBOT_FRAME))
+            # Publish target pose
+            if not DEBUG:
+                target_pose = np.concatenate(
+                    [local_target_pos, interp_rot])
+                # target_pose[:3] = 0.7 * target_pose[:3] + 0.3 * cur_pose[:3]
+                kinova.pose_pub.publish(pose_to_msg(
+                    target_pose, frame=ROBOT_FRAME))
 
-        if DEBUG:
-            kinova.cur_pos = local_target_pos
-            kinova.cur_ori_quat = interp_rot
+            if DEBUG:
+                kinova.cur_pos = local_target_pos
+                kinova.cur_ori_quat = interp_rot
 
-        if step % 2 == 0:
-            print("Pos error: ", np.linalg.norm(
-                local_target_pos - kinova.cur_pos))
-            print("Ori error: ", np.linalg.norm(
-                np.arccos(np.abs(kinova.cur_ori_quat @ local_target_ori_quat))))
-            # print("Dpose: ", del_pose_running_avg.avg)
-            print()
+            prev_pose_quat = np.copy(cur_pose_quat)
+            rospy.sleep(0.8)
 
-        prev_pose_quat = np.copy(cur_pose_quat)
-        rospy.sleep(0.3)
-
-
-        step += 1
+            inner_step += 1
